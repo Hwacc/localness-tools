@@ -10,7 +10,7 @@ A pnpm workspace; each package lives under `packages/`.
 | --------------------- | ------- | ------------------------------------------------------------------ |
 | `@localness/sdk`      | Ready   | Typed `/api/v1` client with a pluggable cache and change detection |
 | `@localness/unplugin` | Planned | Build-tool plugin (`packages/unplugin`) built on the SDK           |
-| VS Code extension     | Planned | Editor integration (`packages/vscode`) built on the SDK            |
+| VS Code extension     | Preview | Editor integration (`packages/vscode`) built on the SDK            |
 
 ## Development
 

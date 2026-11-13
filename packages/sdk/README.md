@@ -117,4 +117,4 @@ Pass `fetch` to `createClient` to supply your own implementation, for example a 
 
 ## Contract types
 
-Response types come from `@localness/contract`. `GET /api/v1/keys/states` and `meta.sourceLocale` are not in a published contract release yet, so the SDK carries temporary schemas for them (marked `TODO` in `src/schemas.ts`).
+Response types come from `@localness/contract` (>= 0.4.1, which includes `GET /api/v1/keys/states` and `meta.sourceLocale`) and are re-exported.

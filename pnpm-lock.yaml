@@ -30,11 +30,20 @@ importers:
   packages/sdk:
     dependencies:
       '@localness/contract':
-        specifier: ^0.4.0
-        version: 0.4.0(zod@4.6.7)
+        specifier: ^0.4.1
+        version: 0.4.1(zod@4.6.7)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  packages/vscode:
+    devDependencies:
+      '@localness/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@types/vscode':
+        specifier: ~1.90.0
+        version: 1.90.0
 
 packages:
 
@@ -57,8 +66,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@localness/contract@0.4.0':
-    resolution: {integrity: sha512-rRb3d3Z+lQzPHwFSNHwS871M37IFYnpwZ0Grta33dYkOThrHWFOu7ajgWqm2ebqm1G34E3BGZUs41eJyxuBRwQ==}
+  '@localness/contract@0.4.1':
+    resolution: {integrity: sha512-1bhxnXjhA9W+xeIfSdAcbFzPdEIFBCvjnCGDToXb4l9lQM+rfAlX8Pa13uUcc1rux0sV3sNBmknIXIJgQnPVxQ==}
     peerDependencies:
       zod: ^4.0.0
 
@@ -394,6 +403,9 @@ packages:
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  '@types/vscode@1.90.0':
+    resolution: {integrity: sha512-oT+ZJL7qHS9Z8bs0+WKf/kQ27qWYR3trsXpq46YDjFqBsMLG4ygGGjPaJ2tyrH0wJzjOEmDyg9PDJBBhWg9pkQ==}
 
   '@vitest/mocker@5.1.0':
     resolution: {integrity: sha512-5umB9/jlWcqVS6fsrFmv5Gdnpu6wAUio/lEOwAmvB7v+lFo/IW2B9FhAD0p19GCULTgMzLCdUmuCDCnAzWgppQ==}
@@ -857,7 +869,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@localness/contract@0.4.0(zod@4.6.7)':
+  '@localness/contract@0.4.1(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
@@ -1049,6 +1061,8 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
+
+  '@types/vscode@1.90.0': {}
 
   '@vitest/mocker@5.1.0(vite@8.3.7(@types/node@26.6.6))':
     dependencies:

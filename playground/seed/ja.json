@@ -1,0 +1,34 @@
+{
+  "welcome": "ようこそ",
+  "app-title": "Localness プレイグラウンド",
+  "ok": "OK",
+  "cancel": "キャンセル",
+  "greeting.name": "こんにちは、{name}さん！",
+  "cart": "カート",
+  "auth": {
+    "login": {
+      "title": "ログイン",
+      "submit": "ログイン",
+      "error": "{name} のパスワードが違います。残り {{count}} 回です。"
+    },
+    "session": {
+      "expired": "セキュリティ上の理由によりセッションの有効期限が切れました。続行するには再度ログインしてください。保存されていない変更は 24 時間保持されます。"
+    }
+  },
+  "auth_logout": "ログアウト",
+  "auth-forgot-password": "パスワードをお忘れですか？",
+  "auth:two-factor": "2 段階認証コード",
+  "auth/terms": "<a href=\"/terms\" target=\"_blank\">利用規約</a>と<b>プライバシーポリシー</b>に同意します。",
+  "cart.items.count": "{count, plural, other {# 点の商品}}",
+  "cart.total": "合計：{{amount}}",
+  "cart_empty_html": "<strong>カートは空です。</strong><br>気に入った商品を追加しましょう！",
+  "cart.checkout.done": "ご注文ありがとうございます！🎉🛒✅",
+  "cart.note.long": "平日 14 時までのご注文は当日中に梱包します。それ以降、土日祝日のご注文は翌営業日の発送となります。荷物を配送業者に引き渡し次第、追跡リンクをメールでお送りします。",
+  "settings.theme.dark": "ダークモード",
+  "settings.language.arabic": "アラビア語（العربية）",
+  "settings.language.hebrew": "ヘブライ語（עברית）",
+  "settings.profile.nickname": "",
+  "settings.profile.bio": "自己紹介を入力してください（日本語・中文・한국어 OK）",
+  "settings.demo.draft": "このキーでドラフト状態を試せます。",
+  "settings.demo.outdated": "このキーで期限切れ状態を試せます。"
+}

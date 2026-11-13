@@ -1,0 +1,36 @@
+{
+  "welcome": "Willkommen",
+  "app-title": "Localness Spielwiese",
+  "ok": "OK",
+  "cancel": "Abbrechen",
+  "authorize": "Autorisieren",
+  "greeting.name": "Hallo, {name}!",
+  "cart": "Warenkorb",
+  "auth": {
+    "login": {
+      "title": "Anmelden",
+      "submit": "Anmelden",
+      "error": "Falsches Passwort für {name}. Noch {{count}} Versuche.",
+      "hint": "Verwende die E-Mail-Adresse, mit der du dich registriert hast."
+    },
+    "session": {
+      "expired": "Deine Sitzung ist aus Sicherheitsgründen abgelaufen. Bitte melde dich erneut an, um fortzufahren; nicht gespeicherte Änderungen bleiben 24 Stunden erhalten."
+    }
+  },
+  "auth_logout": "Abmelden",
+  "auth-forgot-password": "Passwort vergessen?",
+  "auth:two-factor": "Zwei-Faktor-Code",
+  "auth/terms": "Ich akzeptiere die <a href=\"/terms\" target=\"_blank\">Nutzungsbedingungen</a> und die <b>Datenschutzerklärung</b>.",
+  "cart.items.count": "{count, plural, one {# Artikel} other {# Artikel}}",
+  "cart.total": "Summe: {{amount}}",
+  "cart_empty_html": "<strong>Dein Warenkorb ist leer.</strong><br>Füge etwas Schönes hinzu!",
+  "cart.checkout.done": "Bestellung aufgegeben! 🎉🛒✅",
+  "cart.note.long": "Bestellungen, die werktags vor 14:00 Uhr eingehen, werden noch am selben Tag verpackt. Später, am Wochenende oder an Feiertagen eingegangene Bestellungen verlassen unser Lager am nächsten Werktag.",
+  "settings.theme.dark": "Dunkler Modus",
+  "settings.language.arabic": "Arabisch (العربية)",
+  "settings.language.hebrew": "Hebräisch (עברית)",
+  "settings.profile.nickname": "Spitzname",
+  "settings.profile.bio": "Erzähl uns von dir (日本語・中文・한국어 willkommen)",
+  "settings.demo.draft": "Mit diesem Key kannst du den Entwurfsstatus testen.",
+  "settings.demo.outdated": "Mit diesem Key kannst du den Status „veraltet“ testen."
+}

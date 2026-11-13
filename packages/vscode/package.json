@@ -1,0 +1,260 @@
+{
+  "name": "localness-vscode",
+  "displayName": "Localness",
+  "description": "Hover, inline hints, diagnostics and a key browser for Localness translation keys.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "localness",
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hwacc/localness-tools.git",
+    "directory": "packages/vscode"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "localness.signIn",
+        "title": "Sign in",
+        "category": "Localness"
+      },
+      {
+        "command": "localness.signOut",
+        "title": "Sign out",
+        "category": "Localness"
+      },
+      {
+        "command": "localness.selectProject",
+        "title": "Select project",
+        "category": "Localness"
+      },
+      {
+        "command": "localness.switchDisplayLocale",
+        "title": "Switch display locale",
+        "category": "Localness",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "localness.switchInlineHintMode",
+        "title": "Switch inline hint mode",
+        "category": "Localness",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "localness.refresh",
+        "title": "Refresh",
+        "category": "Localness",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "localness.searchKeys",
+        "title": "Search keys",
+        "category": "Localness",
+        "icon": "$(search)"
+      },
+      {
+        "command": "localness.openKey",
+        "title": "Open key in Localness",
+        "category": "Localness"
+      },
+      {
+        "command": "localness.showMenu",
+        "title": "Show menu",
+        "category": "Localness"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "localness.openKey",
+          "when": "false"
+        },
+        {
+          "command": "localness.showMenu",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "localness.searchKeys",
+          "when": "view == localness.keys",
+          "group": "navigation@1"
+        },
+        {
+          "command": "localness.switchDisplayLocale",
+          "when": "view == localness.keys",
+          "group": "navigation@2"
+        },
+        {
+          "command": "localness.refresh",
+          "when": "view == localness.keys",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "localness",
+          "title": "Localness",
+          "icon": "media/localness.svg"
+        }
+      ]
+    },
+    "views": {
+      "localness": [
+        {
+          "id": "localness.keys",
+          "name": "Keys"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "localness.keys",
+        "contents": "Connect to a Localness instance to browse translation keys.\n[Sign in](command:localness.signIn)\n[Select project](command:localness.selectProject)",
+        "when": "!localness.ready"
+      }
+    ],
+    "configuration": {
+      "title": "Localness",
+      "properties": {
+        "localness.baseUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Base URL of the Localness instance, for example `https://localness.example.com`."
+        },
+        "localness.project": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Project id or name. Leave empty to pick one from the projects your token can reach."
+        },
+        "localness.displayLocale": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Locale shown in hovers, inline hints and the key tree. Empty picks the first non-source locale."
+        },
+        "localness.keyPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "window",
+          "markdownDescription": "Extra regular expressions that recognise translation keys. The key must be in capture group 1."
+        },
+        "localness.useDefaultKeyPatterns": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Also use the built-in patterns (`t('key')`, `$t('key')`, `i18n.t('key')`, `<i18n-t keypath=\"key\">`). Turn off to use only `#localness.keyPatterns#`."
+        },
+        "localness.inlineHints": {
+          "type": "string",
+          "enum": [
+            "inline",
+            "replace",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Show the display-locale text after each recognised key.",
+            "Show the display-locale text in place of the key; see `#localness.replaceRevealOn#`.",
+            "Do not show inline hints."
+          ],
+          "default": "inline",
+          "scope": "window",
+          "description": "How the display-locale text of recognised keys is shown in the editor."
+        },
+        "localness.inlineHintStyle": {
+          "type": "string",
+          "enum": [
+            "inlay",
+            "dot",
+            "arrow",
+            "plain"
+          ],
+          "enumDescriptions": [
+            "Like native inlay hints: theme inlay-hint colours on a rounded background.",
+            "Separated by a middle dot: t('key'·text).",
+            "Separated by an arrow: t('key' → text).",
+            "Italic text after a space."
+          ],
+          "default": "inlay",
+          "scope": "window",
+          "description": "Look of inline hints in `inline` mode."
+        },
+        "localness.replaceRevealOn": {
+          "type": "string",
+          "enum": [
+            "line",
+            "cursor"
+          ],
+          "enumDescriptions": [
+            "Show the key while the cursor or a selection is on its line.",
+            "Show the key only while the cursor or a selection touches the key or its quotes."
+          ],
+          "default": "line",
+          "scope": "window",
+          "description": "When a key replaced by its translation (`replace` mode) is shown again."
+        },
+        "localness.inlineHintMaxLength": {
+          "type": "number",
+          "default": 40,
+          "minimum": 5,
+          "scope": "window",
+          "description": "Longest inline hint, in characters, before it is truncated."
+        },
+        "localness.keyUnderline": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Underline recognised keys that exist in the Localness project."
+        },
+        "localness.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "Warn about recognised keys that do not exist in the project."
+        },
+        "localness.languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "typescript",
+            "typescriptreact",
+            "javascript",
+            "javascriptreact",
+            "vue",
+            "html"
+          ],
+          "scope": "window",
+          "markdownDescription": "Language ids in which keys are recognised."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@localness/sdk": "workspace:*",
+    "@types/vscode": "~1.90.0"
+  }
+}

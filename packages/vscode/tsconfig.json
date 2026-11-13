@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vscode"],
+    "paths": {
+      "@localness/sdk": ["../sdk/src/index.ts"]
+    }
+  },
+  "include": ["src", "test", "tsdown.config.ts", "vitest.config.ts"]
+}

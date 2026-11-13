@@ -1,0 +1,39 @@
+{
+  "welcome": "Welcome",
+  "app-title": "Localness Playground",
+  "ok": "OK",
+  "cancel": "Cancel",
+  "authorize": "Authorize",
+  "greeting.name": "Hello, {name}!",
+  "cart": "Cart",
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "submit": "Sign in",
+      "error": "Wrong password for {name}. {{count}} attempts left.",
+      "hint": "Use the email address you registered with."
+    },
+    "session": {
+      "expired": "Your session has expired for security reasons. Please sign in again to continue where you left off; unsaved changes are kept for 24 hours."
+    }
+  },
+  "auth_logout": "Sign out",
+  "auth-forgot-password": "Forgot password?",
+  "auth:two-factor": "Two-factor code",
+  "auth/terms": "I accept the <a href=\"/terms\" target=\"_blank\">Terms of Service</a> and the <b>Privacy Policy</b>.",
+  "cart.items.count": "{count, plural, one {# item} other {# items}}",
+  "cart.total": "Total: {{amount}}",
+  "cart_empty_html": "<strong>Your cart is empty.</strong><br>Add something nice!",
+  "cart.checkout.done": "Order placed! 🎉🛒✅",
+  "cart.promo.banner": "Spring sale: take 20% off every order over $50 until the end of the month. Free shipping applies automatically at checkout, and members get an extra 5% off. Offer cannot be combined with other promotions, gift cards or bundles, and excludes already discounted items.",
+  "cart.note.long": "Orders placed before 14:00 on a working day are packed the same day. Orders placed later, on weekends or on public holidays leave our warehouse on the next working day. You will receive a tracking link by email as soon as the parcel is handed to the carrier. If anything is missing or damaged, reply to that email within 14 days and we will make it right.",
+  "cart.demo.unpublished": "Only the source text exists for this key.",
+  "settings.theme.dark": "Dark mode",
+  "settings.language.arabic": "Arabic (العربية)",
+  "settings.language.hebrew": "Hebrew (עברית)",
+  "settings.profile.nickname": "Nickname",
+  "settings.profile.bio": "Tell us about yourself (日本語・中文・한국어 welcome)",
+  "settings.danger.delete": "Delete my account",
+  "settings.demo.draft": "Use this key to try the draft state.",
+  "settings.demo.outdated": "Use this key to try the outdated state."
+}

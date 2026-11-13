@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <!-- EXPECT: detected welcome -- inline script -->
+    <script>
+      document.title = t('welcome')
+    </script>
+    <!-- EXPECT: detected auth/terms -- keypath with a slash separator -->
+    <i18n-t keypath="auth/terms"></i18n-t>
+    <!-- EXPECT: detected cancel -- call inside an attribute value with different quotes -->
+    <button onclick="alert(t('cancel'))">x</button>
+    <!-- EXPECT: detected auth:two-factor -- colon separator -->
+    <label title="{{ $t('auth:two-factor') }}">x</label>
+    <!-- EXPECT: detected comment.html.key -- SURPRISING: HTML comment still matches: t('comment.html.key') -->
+  </body>
+</html>
