@@ -11,7 +11,17 @@ import {
   findConfigFile,
   loadConfig,
   parseConfig,
+  PULL_KINDS,
+  PUSH_KINDS,
+  checkPlan,
+  listPlans,
   planPull,
+  planPush,
+  prunePlans,
+  readBase,
+  recordPull,
+  savePlan,
+  writeBase,
   type LocalnessConfigInput,
 } from '../src/sync'
 import { BASE_URL, TOKEN, mockFetch } from './helpers'
@@ -68,50 +78,65 @@ function platform(keys: Record<string, Texts>) {
 }
 
 describe('diffLocaleTexts', () => {
-  it('reports each kind of difference', () => {
-    const entries = diffLocaleTexts(
-      ['en'],
-      { en: { same: 'A', changed: 'old', local: 'L', filled: 'F' } },
-      {
+  it('tells who changed by the base', () => {
+    const entries = diffLocaleTexts({
+      locales: ['en'],
+      local: {
         en: {
           same: 'A',
-          changed: 'new',
-          remote: 'R',
-          filled: null,
-          none: null,
+          theirs: 'base',
+          mine: 'new',
+          both: 'mine',
+          nobase: 'L',
+          added: 'L',
+          dropped: 'L',
+          waiting: 'pushed',
+          busy: 'mine',
         },
       },
-    )
-    expect(entries).toEqual([
-      {
-        locale: 'en',
-        key: 'changed',
-        kind: 'different',
-        local: 'old',
-        platform: 'new',
+      platform: {
+        texts: {
+          en: {
+            same: 'A',
+            theirs: 'moved',
+            mine: 'base',
+            both: 'theirs',
+            nobase: 'P',
+            remote: 'R',
+            gone: 'base',
+            waiting: 'old',
+            busy: 'base',
+          },
+        },
+        drafts: {
+          en: { waiting: 'pushed', busy: 'someone', mine: 'base' },
+        },
       },
-      {
-        locale: 'en',
-        key: 'filled',
-        kind: 'empty-on-platform',
-        local: 'F',
-        platform: null,
+      base: {
+        en: {
+          theirs: 'base',
+          mine: 'base',
+          both: 'base',
+          dropped: 'L',
+          gone: 'base',
+          busy: 'base',
+        },
       },
-      {
-        locale: 'en',
-        key: 'local',
-        kind: 'missing-on-platform',
-        local: 'L',
-        platform: null,
-      },
-      {
-        locale: 'en',
-        key: 'remote',
-        kind: 'missing-locally',
-        local: null,
-        platform: 'R',
-      },
-    ])
+    })
+    expect(
+      Object.fromEntries(entries.map((entry) => [entry.key, entry.kind])),
+    ).toEqual({
+      added: 'local-added',
+      both: 'conflict',
+      busy: 'conflict',
+      dropped: 'platform-deleted',
+      gone: 'local-deleted',
+      mine: 'local-changed',
+      nobase: 'different',
+      remote: 'platform-added',
+      theirs: 'platform-changed',
+      waiting: 'pending-publish',
+    })
   })
 })
 
@@ -167,7 +192,10 @@ describe('locale file sync', () => {
     })
     const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
     const comparison = await compareLocaleFiles(loaded, client)
-    const plan = planPull(comparison, { format: 'nested-json' })
+    const plan = planPull(comparison, {
+      format: 'nested-json',
+      kinds: PULL_KINDS,
+    })
     expect(
       plan.map((file) => [file.relativePath, file.created, file.set]),
     ).toEqual([
@@ -196,6 +224,7 @@ describe('locale file sync', () => {
     const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
     const [file] = planPull(await compareLocaleFiles(loaded, client), {
       format: 'nested-json',
+      kinds: PULL_KINDS,
       prune: true,
     })
     expect(file).toMatchObject({
@@ -204,6 +233,79 @@ describe('locale file sync', () => {
       skipped: ['a.b'],
     })
     expect(JSON.parse(file!.output!)).toEqual({ cta: 'Go now' })
+  })
+
+  it('records a base, then plans pushes for local changes only', async () => {
+    const loaded = await setup()
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ a: 'A', b: 'B' }),
+    )
+    const keys: Record<string, Texts> = {
+      a: { en: { publishedText: 'A', draftText: 'A' } },
+      b: { en: { publishedText: 'B', draftText: 'B' } },
+    }
+    const client = createClient({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      fetch: platform(keys).fetch,
+    })
+    const first = await compareLocaleFiles(loaded, client)
+    expect(first.base).toBeNull()
+    await writeBase(loaded, recordPull(first, []))
+    expect(await readBase(loaded)).toEqual({ en: { a: 'A', b: 'B' } })
+    expect(await readFile(join(root, '.localness', '.gitignore'), 'utf8')).toBe(
+      '*\n',
+    )
+
+    keys.a = { en: { publishedText: 'A2', draftText: 'A2' } }
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ a: 'A', b: 'B2', c: 'C' }),
+    )
+    await writeFile(
+      join(root, 'locales', 'ja.json'),
+      JSON.stringify({ d: 'D' }),
+    )
+    const second = await compareLocaleFiles(loaded, client)
+    expect(second.entries.map((entry) => [entry.key, entry.kind])).toEqual([
+      ['a', 'platform-changed'],
+      ['b', 'local-changed'],
+      ['c', 'local-added'],
+      ['d', 'local-added'],
+    ])
+    const plan = planPush(loaded, second, { kinds: PUSH_KINDS })
+    expect(plan.keys).toEqual([
+      {
+        key: 'b',
+        create: null,
+        locales: { en: { text: 'B2', platform: 'B', draft: 'B' } },
+      },
+      { key: 'c', create: { sourceText: 'C' }, locales: {} },
+    ])
+    expect(plan.blocked).toEqual([
+      { locale: 'ja', key: 'd', reason: 'no-source-text' },
+    ])
+
+    expect((await checkPlan(client, plan)).stale).toEqual([])
+    keys.b = { en: { publishedText: 'B', draftText: 'Someone' } }
+    keys.c = { en: { publishedText: 'C' } }
+    expect((await checkPlan(client, plan)).stale).toEqual(['b', 'c'])
+    expect(
+      (await checkPlan(client, plan, new Date(Date.now() + 2 * 3600_000)))
+        .expired,
+    ).toBe(true)
+
+    await savePlan(loaded, plan)
+    await writeFile(join(root, '.localness', 'plans', 'broken.json'), '{')
+    expect(await prunePlans(loaded)).toEqual([])
+    expect(
+      await prunePlans(loaded, new Date(Date.now() + 2 * 3600_000)),
+    ).toEqual([plan.id])
+    expect(await listPlans(loaded)).toEqual([])
+    expect(
+      await readFile(join(root, '.localness', 'plans', 'broken.json'), 'utf8'),
+    ).toBe('{')
   })
 
   it('limits both sides to the requested keys', async () => {

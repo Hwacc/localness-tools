@@ -5,10 +5,31 @@ import {
   writeLocaleFile,
   type LocaleFileFormat,
 } from '@localness/contract/locale-file'
-import type { Comparison } from './diff'
+import type { Comparison, DiffKind } from './diff'
+import type { BaseTexts } from './state'
+
+/** What `pull` writes: the project's changes, and `different` when there is no base to judge. */
+export const PULL_KINDS: readonly DiffKind[] = [
+  'platform-added',
+  'platform-changed',
+  'different',
+]
+/** `sync` leaves `different` alone: either side may be the newer one. */
+export const SYNC_PULL_KINDS: readonly DiffKind[] = [
+  'platform-added',
+  'platform-changed',
+]
+/** `pull --keys`: the named keys take the project's text whatever changed. */
+export const FORCED_PULL_KINDS: readonly DiffKind[] = [
+  ...PULL_KINDS,
+  'local-changed',
+  'local-deleted',
+  'conflict',
+]
 
 export interface PullOptions {
   format: LocaleFileFormat
+  kinds: readonly DiffKind[]
   /** Also remove keys the platform does not know. */
   prune?: boolean
 }
@@ -28,21 +49,22 @@ export interface PullFile {
 }
 
 /**
- * Platform text wins for every key it has text for. Keys only in the file stay
- * unless `prune`; keys without platform text are never touched.
+ * The project's text for each entry of `kinds`. Keys the project lacks stay
+ * unless `prune`; keys without project text are never touched.
  */
 export function planPull(
   comparison: Comparison,
   options: PullOptions,
 ): PullFile[] {
+  const kinds = new Set(options.kinds)
   const plans: PullFile[] = []
   for (const file of comparison.files) {
     const writes: Record<string, string | null> = Object.create(null)
     for (const entry of comparison.entries) {
       if (entry.locale !== file.locale) continue
-      if (entry.kind === 'missing-locally' || entry.kind === 'different') {
+      if (kinds.has(entry.kind) && entry.platform !== null) {
         writes[entry.key] = entry.platform
-      } else if (entry.kind === 'missing-on-platform' && options.prune) {
+      } else if (!entry.onPlatform && options.prune) {
         writes[entry.key] = null
       }
     }
@@ -79,4 +101,39 @@ export async function applyPull(files: readonly PullFile[]) {
     await mkdir(dirname(file.path), { recursive: true })
     await writeFile(file.path, file.output, 'utf8')
   }
+}
+
+/**
+ * The base once `files` are written: every key in scope whose file text now
+ * equals the project's records that text; keys gone from both sides drop out;
+ * the rest keep their base, so a later run still sees who changed.
+ */
+export function recordPull(
+  comparison: Comparison,
+  files: readonly PullFile[],
+): BaseTexts {
+  const next: BaseTexts = { ...comparison.base }
+  const only = comparison.keys && new Set(comparison.keys)
+  for (const locale of comparison.locales) {
+    const platform = comparison.platform.texts[locale] ?? {}
+    const after = { ...comparison.local[locale] }
+    const file = files.find((item) => item.locale === locale && item.output)
+    for (const key of file?.set ?? []) after[key] = platform[key]!
+    for (const key of file?.removed ?? []) delete after[key]
+    const texts = { ...next[locale] }
+    const keys = new Set([
+      ...Object.keys(after),
+      ...Object.keys(platform),
+      ...Object.keys(texts).filter((key) => !only || only.has(key)),
+    ])
+    for (const key of keys) {
+      const local = Object.hasOwn(after, key) ? after[key]! : null
+      const onPlatform = Object.hasOwn(platform, key)
+      if (local !== null && local === platform[key]) texts[key] = local
+      else if (local === null && !onPlatform) delete texts[key]
+    }
+    if (Object.keys(texts).length > 0) next[locale] = texts
+    else delete next[locale]
+  }
+  return next
 }

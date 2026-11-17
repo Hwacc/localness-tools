@@ -34,6 +34,13 @@ export interface ClientOptions {
   token: string
   /** Project id or name. Required by the server when the token reaches several projects. */
   project?: string | number
+  /**
+   * The tool behind the requests, `name/version` with an optional `; agent`
+   * (`cli/0.1.0; agent`). The platform shows it beside writes in a key's
+   * history; it is a label, not a permission. Leave it unset in browsers: the
+   * custom header needs CORS approval.
+   */
+  client?: string
   fetch?: FetchLike
 }
 

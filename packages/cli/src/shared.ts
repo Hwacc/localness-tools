@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createClient, type FetchLike } from '@localness/sdk'
 import { findConfigFile, loadConfig } from '@localness/sdk/sync'
+import { version } from '../package.json'
 import { ENV_FILE, TOKEN_ENV, findEnvToken } from './env'
 
 export interface CliIo {
@@ -46,6 +47,10 @@ export function list(value: string | undefined) {
   return items.length > 0 ? items : undefined
 }
 
+export function plural(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
 export async function readToken(io: CliIo, dir: string) {
   const token = await findEnvToken(dir, io.env)
   if (!token) {
@@ -54,6 +59,31 @@ export async function readToken(io: CliIo, dir: string) {
     )
   }
   return token
+}
+
+const AGENT_ENV = 'LOCALNESS_AGENT'
+
+/** Variables coding agents set in the shells they run; their value is not checked. */
+const AGENT_MARKERS = [
+  'AI_AGENT',
+  'CLAUDECODE',
+  'CURSOR_AGENT',
+  'COPILOT_CLI',
+  'CODEX_SANDBOX',
+  'GEMINI_CLI',
+]
+
+/**
+ * `cli/<version>`, plus `; agent` when an agent runs it, so the project's
+ * history can tell. `LOCALNESS_AGENT=1` or `0` overrides the detection.
+ */
+export function clientOf(env: CliIo['env']) {
+  const flag = env[AGENT_ENV]
+  const agent =
+    flag !== undefined && flag !== ''
+      ? flag !== '0'
+      : AGENT_MARKERS.some((name) => env[name])
+  return `cli/${version}${agent ? '; agent' : ''}`
 }
 
 export async function loadProject(io: CliIo, values: CliValues) {
@@ -68,6 +98,7 @@ export async function loadProject(io: CliIo, values: CliValues) {
     baseUrl: loaded.config.baseUrl,
     token: await readToken(io, loaded.root),
     project: loaded.config.project,
+    client: clientOf(io.env),
     fetch: io.fetch,
   })
   return { loaded, client }

@@ -24,14 +24,14 @@ Or open `packages/vscode` in the editor and press **F5** with "Run Extension on 
 
 `localness.config.json` points `files` at `src/locales/{locale}.json` (flat JSON; the seed mixes keys like `cart` and `cart.total`, which nested JSON cannot hold both of). These files are the CLI fixtures, not import data: they were pulled from the project, then edited so `localness diff` shows every kind of difference:
 
-| File           | Change                                          | `diff` shows                 |
+| File           | Change                                          | `diff` shows (no base yet)   |
 | -------------- | ----------------------------------------------- | ---------------------------- |
-| `en.json`      | `welcome` reworded, `ok` removed, `home.hero.title` added | `~`, `+`, `-` (not in the project) |
-| `zh-CN.json`   | `cart` reworded, `home.hero.title` added        | `~`, `-`                     |
-| `ja.json`      | `cancel` removed, `settings.profile.nickname` filled | `+`, `?` (no text in the project) |
+| `en.json`      | `welcome` reworded, `ok` removed, `home.hero.title` added | `different`, `platform-added`, `local-added` |
+| `zh-CN.json`   | `cart` reworded, `home.hero.title` added        | `different`, `local-added`   |
+| `ja.json`      | `cancel` removed, `settings.profile.nickname` filled | `platform-added`, `local-added` |
 | `de.json`      | none                                            | nothing                      |
 
-`localness diff` exits 1 with 7 differences; `localness pull --dry-run` lists what `pull` would write. `pull` overwrites the `~` / `+` entries, so restore the fixtures with `git checkout src/locales` afterwards.
+The table holds while the project still has the seed text; edits made on the platform since then change what `diff` shows. `localness pull --dry-run` and `localness push --dry-run` list what would be written. `pull` and `sync` write the files and create `.localness/` (gitignored); restore with `git checkout src/locales` and delete `.localness/` afterwards. `localness apply <id>` writes drafts to the real project and needs a Read & write token.
 
 ## Seed contents
 

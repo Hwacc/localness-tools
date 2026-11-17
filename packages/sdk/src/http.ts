@@ -15,8 +15,12 @@ export type Query = Record<string, string | number | undefined>
 export interface TransportOptions {
   baseUrl: string
   token: string
+  /** Sent as `X-Localness-Client`, see `ClientOptions.client`. */
+  client?: string
   fetch?: FetchLike
 }
+
+export const CLIENT_HEADER = 'x-localness-client'
 
 export type WriteMethod = 'POST' | 'PATCH'
 
@@ -74,6 +78,7 @@ export function createTransport(options: TransportOptions): Transport {
       accept: 'application/json',
     }
     if (write) headers['content-type'] = 'application/json'
+    if (options.client) headers[CLIENT_HEADER] = options.client
 
     let res
     try {

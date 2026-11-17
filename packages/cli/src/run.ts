@@ -1,27 +1,36 @@
 import { parseArgs } from 'node:util'
 import { LocalnessError } from '@localness/sdk'
 import { version } from '../package.json'
+import { runApply } from './apply'
 import { runDiff } from './diff'
 import { TOKEN_ENV } from './env'
 import { runInit } from './init'
 import { runPull } from './pull'
+import { runPush } from './push'
 import { EXIT_ERROR, OPTIONS, type CliIo } from './shared'
+import { runSuggestName } from './suggest-name'
+import { runSync } from './sync'
 
 const HELP = `localness ${version}: sync locale JSON files with a Localness project
 
 Usage: localness <command> [options]
 
 Commands:
-  init     Find the repository's locale files and write localness.config.json
-  diff     Compare the locale files with the project (exit 1 when they differ)
-  pull     Write the project's text into the locale files
+  init                 Find the repository's locale files and write localness.config.json
+  diff                 Compare the locale files with the project (exit 1 when they differ)
+  pull                 Write the project's changes into the locale files
+  push                 Plan sending local changes to the project; writes nothing
+  apply <id>           Write a plan to the project (no id: list plans)
+  sync                 pull the project's changes, then plan a push of local ones
+  suggest-name <text>  Ask the project's AI for a key name; writes nothing
 
 Options:
   --config <path>      Config file (default: nearest localness.config.json)
-  --keys <a,b>         Only these keys (diff, pull)
-  --locales <en,ja>    Only these platform locales (diff, pull)
+  --keys <a,b>         Only these keys; for pull and push, take that side even
+                       when both changed
+  --locales <en,ja>    Only these platform locales
   --prune              Also remove keys the project does not have (pull)
-  --dry-run            Show what would be written (init, pull)
+  --dry-run            Show what would happen (init, pull, push, sync)
   --json               Machine-readable output
   --base-url <url>     Localness instance URL (init)
   --project <name|id>  Project (init; default: the token's only project)
@@ -33,7 +42,9 @@ Options:
   -v, --version        Show the version
 
 The token is ${TOKEN_ENV} from .env.local next to the config, else from the
-environment; a read token is enough.
+environment. Reading needs a read token; apply and suggest-name need a
+read & write token. pull, sync and apply keep .localness/ next to the config:
+the last agreed text and pending plans, never committed.
 `
 
 function describe(error: unknown) {
@@ -44,6 +55,8 @@ function describe(error: unknown) {
   switch (error.code) {
     case 'auth':
       return `Authentication failed; check ${TOKEN_ENV}.`
+    case 'forbidden':
+      return `The token may not do this${detail}; ${TOKEN_ENV} needs a read & write token.`
     case 'ambiguous-project':
       return 'The project name matches more than one project; set "project" to its id.'
     case 'bad-request':
@@ -69,7 +82,13 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
       io.stdout(HELP)
       return values.help ? 0 : EXIT_ERROR
     }
-    if (rest.length > 0) throw new Error(`Unexpected argument: ${rest[0]}`)
+    if (command === 'suggest-name') {
+      return await runSuggestName(io, values, rest.join(' '))
+    }
+    const allowed = command === 'apply' ? 1 : 0
+    if (rest.length > allowed) {
+      throw new Error(`Unexpected argument: ${rest[allowed]}`)
+    }
     switch (command) {
       case 'init':
         return await runInit(io, values)
@@ -77,6 +96,12 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
         return await runDiff(io, values)
       case 'pull':
         return await runPull(io, values)
+      case 'push':
+        return await runPush(io, values)
+      case 'apply':
+        return await runApply(io, values, rest[0])
+      case 'sync':
+        return await runSync(io, values)
       default:
         throw new Error(`Unknown command: ${command}. Run "localness --help".`)
     }

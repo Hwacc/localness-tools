@@ -141,7 +141,12 @@ export class DataController implements vscode.Disposable {
         project = projects[0]?.id
       }
 
-      const client = createClient({ baseUrl, token, project })
+      const client = createClient({
+        baseUrl,
+        token,
+        project,
+        client: `vscode/${this.context.extension.packageJSON.version}`,
+      })
       this.#client = client
       const base = { baseUrl: client.baseUrl, project }
       const maxAgeMs = force ? 0 : FRESH_MS

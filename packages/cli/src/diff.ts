@@ -1,4 +1,10 @@
-import { compareLocaleFiles, type DiffEntry } from '@localness/sdk/sync'
+import {
+  DIFF_KINDS,
+  compareLocaleFiles,
+  type Comparison,
+  type DiffEntry,
+  type DiffKind,
+} from '@localness/sdk/sync'
 import {
   EXIT_DIFFERENT,
   list,
@@ -16,18 +22,73 @@ export function quote(text: string | null) {
   return JSON.stringify(short)
 }
 
-function describeEntry(entry: DiffEntry) {
+function detail(entry: DiffEntry) {
+  const { local, platform, draft, base } = entry
   switch (entry.kind) {
-    case 'missing-locally':
-      return `  + ${entry.key}: ${quote(entry.platform)}`
+    case 'platform-added':
+      return quote(platform)
+    case 'platform-changed':
+      return `${quote(local)} → ${quote(platform)}`
+    case 'platform-deleted':
+      return `${quote(local)} (deleted in the project)`
+    case 'local-added':
+      return `${quote(local)} (${entry.onPlatform ? 'no text' : 'not'} in the project)`
+    case 'local-changed':
+      return `${quote(platform)} → ${quote(local)}`
+    case 'local-deleted':
+      return `${quote(platform)} (deleted locally)`
     case 'different':
-      return `  ~ ${entry.key}: ${quote(entry.local)} → ${quote(entry.platform)}`
-    case 'missing-on-platform':
-      return `  - ${entry.key}: ${quote(entry.local)} (not in the project)`
-    case 'empty-on-platform':
-      return `  ? ${entry.key}: ${quote(entry.local)} (no text in the project)`
+      return `local ${quote(local)}, project ${quote(platform)}`
+    case 'conflict':
+      return [
+        `local ${quote(local)}`,
+        `project ${quote(platform)}`,
+        draft !== null && draft !== platform && `unpublished ${quote(draft)}`,
+        `base ${quote(base)}`,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    case 'pending-publish':
+      return `${quote(local)} (draft waiting for a publish)`
   }
 }
+
+const KIND_WIDTH = Math.max(...DIFF_KINDS.map((kind) => kind.length))
+
+export function describeEntry(entry: DiffEntry) {
+  return `  ${entry.kind.padEnd(KIND_WIDTH)}  ${entry.key}: ${detail(entry)}`
+}
+
+export function countKinds(entries: readonly DiffEntry[]) {
+  const counts = new Map<DiffKind, number>()
+  for (const entry of entries) {
+    counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1)
+  }
+  return DIFF_KINDS.filter((kind) => counts.has(kind))
+    .map((kind) => `${counts.get(kind)} ${kind}`)
+    .join(', ')
+}
+
+export function filesByLocale(comparison: Comparison) {
+  return Object.fromEntries(
+    comparison.files.map((file) => [file.locale, file.relativePath]),
+  )
+}
+
+const HINTS: [readonly DiffKind[], string][] = [
+  [
+    ['platform-added', 'platform-changed', 'different'],
+    '"localness pull" takes the project\'s text for platform-added, platform-changed and different.',
+  ],
+  [
+    ['local-added', 'local-changed'],
+    '"localness push" plans sending local-added and local-changed.',
+  ],
+  [
+    ['conflict', 'local-deleted', 'platform-deleted'],
+    'Name a key to choose a side: "pull --keys <key>" or "push --keys <key>"; "pull --prune" drops platform-deleted.',
+  ],
+]
 
 export async function runDiff(io: CliIo, values: CliValues) {
   const { client, loaded } = await loadProject(io, values)
@@ -35,39 +96,47 @@ export async function runDiff(io: CliIo, values: CliValues) {
     locales: list(values.locales),
     keys: list(values.keys),
   })
-  const files = Object.fromEntries(
-    comparison.files.map((file) => [file.locale, file.relativePath]),
-  )
+  const files = filesByLocale(comparison)
+  const { entries } = comparison
   if (values.json) {
     io.stdout(
       `${JSON.stringify(
         {
           sourceLocale: comparison.sourceLocale,
           locales: comparison.locales,
-          content: loaded.config.content,
+          content: comparison.content,
+          hasBase: comparison.base !== null,
           files,
-          differences: comparison.entries,
+          differences: entries,
         },
         null,
         2,
       )}\n`,
     )
-  } else if (comparison.entries.length === 0) {
+  } else if (entries.length === 0) {
     io.stdout(
-      `Up to date: ${comparison.locales.length} locale files match the project's ${loaded.config.content} text.\n`,
+      `Up to date: ${comparison.locales.length} locale files match the project's ${comparison.content} text.\n`,
     )
   } else {
     for (const locale of comparison.locales) {
-      const entries = comparison.entries.filter(
-        (entry) => entry.locale === locale,
-      )
-      if (entries.length === 0) continue
+      const own = entries.filter((entry) => entry.locale === locale)
+      if (own.length === 0) continue
       io.stdout(`${files[locale]} (${locale})\n`)
-      for (const entry of entries) io.stdout(`${describeEntry(entry)}\n`)
+      for (const entry of own) io.stdout(`${describeEntry(entry)}\n`)
     }
     io.stdout(
-      `\n${comparison.entries.length} differences against the project's ${loaded.config.content} text. "localness pull" writes + and ~.\n`,
+      `\n${entries.length} differences against the project's ${comparison.content} text: ${countKinds(entries)}.\n`,
     )
+    if (comparison.base === null) {
+      io.stdout(
+        'No base yet, so changed text shows as "different"; pull or sync records one.\n',
+      )
+    }
+    for (const [kinds, hint] of HINTS) {
+      if (entries.some((entry) => kinds.includes(entry.kind))) {
+        io.stdout(`${hint}\n`)
+      }
+    }
   }
-  return comparison.entries.length > 0 ? EXIT_DIFFERENT : 0
+  return entries.length > 0 ? EXIT_DIFFERENT : 0
 }

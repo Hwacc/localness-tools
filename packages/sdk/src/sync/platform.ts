@@ -1,13 +1,31 @@
 import { normalizeLocaleText } from '@localness/contract/locale-file'
 import { isUnnamedKey } from '@localness/contract/rules'
 import type { LocalnessClient } from '../client'
+import type { DeliveryKeyState } from '../schemas'
 import type { SyncContent } from './config'
 
 export interface PlatformTexts {
   sourceLocale: string
+  /** The requested locales. */
   locales: string[]
-  /** Per locale, every named key: its text, or null when it has none. */
+  /**
+   * Per locale, every named key: its text, or null when it has none. Also
+   * holds the source locale when it was not requested, for push.
+   */
   texts: Record<string, Record<string, string | null>>
+  /** Same shape: the editor's working text, unpublished edits included. */
+  drafts: Record<string, Record<string, string | null>>
+}
+
+type LocaleState = DeliveryKeyState['locales'][string] | undefined
+
+/** The text a locale file gets from this state. */
+export function platformTextOf(state: LocaleState, content: SyncContent) {
+  return normalizeLocaleText(
+    content === 'draft'
+      ? (state?.draftText ?? state?.publishedText)
+      : state?.publishedText,
+  )
 }
 
 export interface FetchPlatformTextsOptions {
@@ -34,19 +52,28 @@ export async function fetchPlatformTexts(
       `Unknown locale ${unknown.join(', ')}; ${meta.project.name} has ${meta.locales.join(', ')}.`,
     )
   }
-  const result = await client.keyStates({ locales, keys: options.keys })
+  const source = meta.sourceLocale
+  const fetched =
+    source === undefined || locales.includes(source)
+      ? locales
+      : [...locales, source]
+  const result = await client.keyStates({
+    locales: fetched,
+    keys: options.keys,
+  })
   const texts: PlatformTexts['texts'] = {}
-  for (const locale of locales) texts[locale] = Object.create(null)
+  const drafts: PlatformTexts['drafts'] = {}
+  for (const locale of fetched) {
+    texts[locale] = Object.create(null)
+    drafts[locale] = Object.create(null)
+  }
   for (const key of result.keys) {
     if (isUnnamedKey(key.key)) continue
-    for (const locale of locales) {
+    for (const locale of fetched) {
       const state = key.locales[locale]
-      const text =
-        options.content === 'draft'
-          ? (state?.draftText ?? state?.publishedText)
-          : state?.publishedText
-      texts[locale]![key.key] = normalizeLocaleText(text ?? null)
+      texts[locale]![key.key] = platformTextOf(state, options.content)
+      drafts[locale]![key.key] = normalizeLocaleText(state?.draftText)
     }
   }
-  return { sourceLocale: result.sourceLocale, locales, texts }
+  return { sourceLocale: result.sourceLocale, locales, texts, drafts }
 }
