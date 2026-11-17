@@ -1,7 +1,9 @@
 import * as vscode from 'vscode'
+import { CONFIG_FILE_NAME } from '@localness/sdk/sync'
 import { registerCommands } from './commands'
 import { DataController } from './controller'
 import { registerDiagnostics } from './diagnostics'
+import { registerExtractText } from './extractText'
 import { registerInlineHints } from './hints'
 import { registerHover } from './hover'
 import { KeyMatcher } from './matcher'
@@ -10,16 +12,15 @@ import { registerTree } from './tree'
 
 const FOCUS_DEBOUNCE_MS = 1500
 const FOCUS_MIN_INTERVAL_MS = 30_000
-const RELOAD_SETTINGS = [
-  'localness.baseUrl',
-  'localness.project',
-  'localness.displayLocale',
-]
 
 export function activate(context: vscode.ExtensionContext) {
   const log = vscode.window.createOutputChannel('Localness')
   const controller = new DataController(context)
-  const matcher = new KeyMatcher(log)
+  const matcher = new KeyMatcher(log, controller)
+  const configWatcher = vscode.workspace.createFileSystemWatcher(
+    `**/${CONFIG_FILE_NAME}`,
+  )
+  const reloadConfig = () => void controller.reload()
   let focusTimer: ReturnType<typeof setTimeout> | undefined
   let lastRefresh = Date.now()
 
@@ -27,17 +28,26 @@ export function activate(context: vscode.ExtensionContext) {
     log,
     controller,
     matcher,
+    configWatcher,
+    configWatcher.onDidCreate(reloadConfig),
+    configWatcher.onDidChange(reloadConfig),
+    configWatcher.onDidDelete(reloadConfig),
+    vscode.window.onDidChangeActiveTextEditor(
+      () => void controller.followEditor(),
+    ),
+    vscode.workspace.onDidChangeWorkspaceFolders(reloadConfig),
     registerStatusBar(controller),
     registerTree(controller),
     registerHover(controller, matcher),
     registerInlineHints(controller, matcher),
     registerDiagnostics(controller, matcher),
     registerCommands(controller, matcher, context),
+    registerExtractText(controller, matcher),
     context.secrets.onDidChange((event) => {
       if (event.key.startsWith('localness.token:')) void controller.reload(true)
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (RELOAD_SETTINGS.some((name) => event.affectsConfiguration(name))) {
+      if (event.affectsConfiguration('localness.displayLocale')) {
         void controller.reload()
       }
     }),

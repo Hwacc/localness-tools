@@ -21,7 +21,7 @@ export function hoverInfoFor(
     displayLocale: data.displayLocale,
     releaseNames: data.releaseNames,
     url: keyUrl({
-      baseUrl: controller.client?.baseUrl ?? readSettings().baseUrl,
+      baseUrl: controller.baseUrl,
       projectId: data.projectId,
       keyId: state.id,
     }),

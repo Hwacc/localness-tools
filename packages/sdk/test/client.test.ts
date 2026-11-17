@@ -86,6 +86,21 @@ describe('client requests', () => {
     expect(calls[0]!.url.searchParams.get('limit')).toBe('5')
   })
 
+  it('matches texts with a POST body', async () => {
+    const body = { matches: [{ text: 'Buy', keys: [] }] }
+    const { fetch, calls } = mockFetch({ body })
+    const client = createClient({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      project: 2,
+      fetch,
+    })
+    await expect(client.match(['Buy'])).resolves.toEqual(body)
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { texts: ['Buy'] } })
+    expect(calls[0]!.url.pathname).toBe('/api/v1/match')
+    expect(calls[0]!.url.searchParams.get('project')).toBe('2')
+  })
+
   it('keeps sourceLocale on meta', async () => {
     const { fetch } = mockFetch({
       body: {

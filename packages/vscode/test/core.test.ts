@@ -11,6 +11,7 @@ import {
 } from '../src/core/data'
 import { describeError } from '../src/core/errors'
 import { localeIcon, localeName } from '../src/core/locales'
+import { withProject } from '../src/core/projectConfig'
 import {
   buildHoverInfo,
   escapeMarkdown,
@@ -249,7 +250,33 @@ describe('project data', () => {
     const b = { id: 2, name: 'web' }
     const c = { id: 3, name: 'api' }
     expect(projectSetting([a, c], a)).toBe('web')
-    expect(projectSetting([a, b, c], a)).toBe('1')
+    expect(projectSetting([a, b, c], a)).toBe(1)
+  })
+})
+
+describe('withProject', () => {
+  it('creates a config file', () => {
+    expect(withProject(undefined, 'https://l.example', 'web')).toBe(
+      '{\n  "baseUrl": "https://l.example",\n  "project": "web"\n}\n',
+    )
+  })
+
+  it('keeps other fields and their order', () => {
+    const source = '{"files":{"dir":"locales"},"project":"old","baseUrl":"x"}'
+    expect(JSON.parse(withProject(source, 'https://l.example', 3))).toEqual({
+      files: { dir: 'locales' },
+      project: 3,
+      baseUrl: 'https://l.example',
+    })
+    expect(Object.keys(JSON.parse(withProject(source, 'u', 3)))).toEqual([
+      'files',
+      'project',
+      'baseUrl',
+    ])
+  })
+
+  it('rejects a non-object file', () => {
+    expect(() => withProject('[]', 'u', 1)).toThrow('JSON object')
   })
 })
 

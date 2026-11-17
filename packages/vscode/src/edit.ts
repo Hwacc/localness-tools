@@ -10,7 +10,6 @@ import { describeError } from './core/errors'
 import { editableText, textFor, truncate } from './core/keys'
 import { localeName } from './core/locales'
 import type { KeyMatcher } from './matcher'
-import { readSettings } from './settings'
 
 export interface EditTarget {
   key: string
@@ -152,7 +151,7 @@ async function editLocale(
       const conflict = draftConflictOf(error)
       if (!conflict) {
         void vscode.window.showErrorMessage(
-          `Localness: ${describeError(error, readSettings().baseUrl)}`,
+          `Localness: ${describeError(error, client.baseUrl)}`,
         )
         return
       }
@@ -192,7 +191,7 @@ export async function editTranslation(
     state = await freshState(client, key)
   } catch (error) {
     void vscode.window.showErrorMessage(
-      `Localness: ${describeError(error, readSettings().baseUrl)}`,
+      `Localness: ${describeError(error, client.baseUrl)}`,
     )
     return
   }

@@ -1,6 +1,4 @@
 {
-  "localness.baseUrl": "http://localhost:3000",
-  "localness.project": "Playground",
   "localness.displayLocale": "zh_cn",
   "localness.inlineHints": "inline",
   "localness.diagnostics": true,

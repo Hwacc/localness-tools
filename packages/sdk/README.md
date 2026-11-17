@@ -28,6 +28,8 @@ const meta = await client.meta() // locales, sourceLocale, releases, coverage
 const ja = await client.locale('ja', { release: 'v1', namespace: 'app' })
 const { outdated } = await client.outdated()
 const hits = await client.searchKeys('welcome', { limit: 20 })
+// Keys whose source text (draft or published) equals each text, in order.
+const { matches } = await client.match(['Welcome', 'Sign in'])
 
 // Draft-visible per-key, per-locale state. Pages through the server limit for you.
 const { keys, sourceLocale } = await client.keyStates({ locales: ['en', 'ja'] })
@@ -133,6 +135,38 @@ await states.clear()
 ```
 
 Concurrent `refresh()` calls share one request. `contentHash(value)`, `stableStringify(value)` and `cacheKey(parts)` are exported for custom caching.
+
+## Locale file sync (`@localness/sdk/sync`)
+
+The core of `@localness/cli`, Node only. It reads `localness.config.json`, compares local locale JSON files with the project, and plans writes.
+
+```ts
+import { createClient } from '@localness/sdk'
+import {
+  applyPull,
+  compareLocaleFiles,
+  findConfigFile,
+  loadConfig,
+  planPull,
+  requireFiles,
+} from '@localness/sdk/sync'
+
+const loaded = await loadConfig((await findConfigFile(process.cwd()))!)
+const { baseUrl, project } = loaded.config
+const client = createClient({ baseUrl, project, token })
+
+const comparison = await compareLocaleFiles(loaded, client, { locales: ['ja'] })
+// entries: { locale, key, kind, local, platform }; kind is missing-locally,
+// different, missing-on-platform or empty-on-platform
+
+const files = planPull(comparison, {
+  format: requireFiles(loaded).format,
+  prune: false,
+})
+await applyPull(files)
+```
+
+`diffLocaleTexts`, `fetchPlatformTexts`, `readLocalFiles` and `parseConfig` are exported for other flows. Keys of unnamed drafts are skipped; `content: "draft"` compares draft text instead of published text.
 
 ## Testing
 

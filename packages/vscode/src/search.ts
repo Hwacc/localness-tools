@@ -2,7 +2,6 @@ import * as vscode from 'vscode'
 import type { DataController } from './controller'
 import { describeError } from './core/errors'
 import { STATE_ICONS, searchCached, stateFor, textFor } from './core/keys'
-import { readSettings } from './settings'
 
 const LOCAL_LIMIT = 50
 const REMOTE_LIMIT = 100
@@ -72,7 +71,7 @@ export async function searchKeys(controller: DataController) {
     } catch (error) {
       if (current === sequence) {
         void vscode.window.showWarningMessage(
-          `Localness: ${describeError(error, readSettings().baseUrl)}`,
+          `Localness: ${describeError(error, client.baseUrl)}`,
         )
       }
     } finally {

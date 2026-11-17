@@ -82,10 +82,19 @@
         "command": "localness.copyKey",
         "title": "Copy key",
         "category": "Localness"
+      },
+      {
+        "command": "localness.extractText",
+        "title": "Extract to Localness",
+        "category": "Localness"
       }
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "localness.extractText",
+          "when": "editorHasSelection"
+        },
         {
           "command": "localness.copyKey",
           "when": "false"
@@ -114,6 +123,13 @@
           "command": "localness.refresh",
           "when": "view == localness.keys",
           "group": "navigation@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "localness.extractText",
+          "when": "editorHasSelection",
+          "group": "1_modification@9"
         }
       ],
       "view/item/context": [
@@ -151,38 +167,11 @@
     "configuration": {
       "title": "Localness",
       "properties": {
-        "localness.baseUrl": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "markdownDescription": "Base URL of the Localness instance, for example `https://localness.example.com`."
-        },
-        "localness.project": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "markdownDescription": "Project id or name. Leave empty to pick one from the projects your token can reach."
-        },
         "localness.displayLocale": {
           "type": "string",
           "default": "",
           "scope": "window",
           "markdownDescription": "Locale shown in hovers, inline hints and the key tree. Empty picks the first non-source locale."
-        },
-        "localness.keyPatterns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "scope": "window",
-          "markdownDescription": "Extra regular expressions that recognise translation keys. The key must be in capture group 1."
-        },
-        "localness.useDefaultKeyPatterns": {
-          "type": "boolean",
-          "default": true,
-          "scope": "window",
-          "markdownDescription": "Also use the built-in patterns (`t('key')`, `$t('key')`, `i18n.t('key')`, `<i18n-t keypath=\"key\">`). Turn off to use only `#localness.keyPatterns#`."
         },
         "localness.inlineHints": {
           "type": "string",

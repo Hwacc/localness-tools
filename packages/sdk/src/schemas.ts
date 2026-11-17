@@ -1,5 +1,6 @@
 export {
   captureKeySearchSchema,
+  captureMatchSchema,
   deliveryBundleSchema,
   deliveryKeyStateSchema,
   deliveryKeyStatesSchema,
@@ -15,6 +16,7 @@ export {
 export type {
   CaptureKeyHit,
   CaptureKeySearch,
+  CaptureMatch,
   DeliveryBundle,
   DeliveryKeyState,
   DeliveryKeyStates,

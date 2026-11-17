@@ -11,14 +11,27 @@ cursor --extensionDevelopmentPath=C:\my-workspace\localness-tools\packages\vscod
 code   --extensionDevelopmentPath=C:\my-workspace\localness-tools\packages\vscode C:\my-workspace\localness-tools\playground
 ```
 
-Or open `packages/vscode` in the editor and press **F5** with "Run Extension on playground" (`packages/vscode/.vscode/launch.json`; it runs the build first). The workspace settings are in `playground/.vscode/settings.json` (base URL, project `playground`, display locale `zh-CN`, inline hints and diagnostics on). Then run **Localness: Sign in** and paste a read token.
+Or open `packages/vscode` in the editor and press **F5** with "Run Extension on playground" (`packages/vscode/.vscode/launch.json`; it runs the build first). The base URL and project are in `playground/localness.config.json`; the display settings (display locale `zh-CN`, inline hints and diagnostics on) in `playground/.vscode/settings.json`. Then run **Localness: Sign in** and paste a token. The CLI does not use that sign-in; for `localness diff` / `pull` put `LOCALNESS_TOKEN=lnk_...` in `playground/.env.local` (gitignored).
 
 ## Platform setup
 
 1. Create a project named `playground` with locales `en`, `zh-CN`, `ja`, `de`; source locale `en`.
 2. Declare the namespaces `auth`, `cart`, `settings` (optional: also `settings.demo` to see longest-match grouping).
 3. As Project Owner open Translations, then **Import**. Select the four files in `playground/seed/`, map each to its locale, review, import. Import publishes everything immediately, so after this all keys are `published` (or `unpublished` where a locale has no text).
-4. Create a read-only personal access token and sign in from the extension.
+4. Create a personal access token (Read & write to try editing and extracting) and sign in from the extension. For the CLI, put a token (Read only is enough) in `playground/.env.local`.
+
+## CLI
+
+`localness.config.json` points `files` at `src/locales/{locale}.json` (flat JSON; the seed mixes keys like `cart` and `cart.total`, which nested JSON cannot hold both of). These files are the CLI fixtures, not import data: they were pulled from the project, then edited so `localness diff` shows every kind of difference:
+
+| File           | Change                                          | `diff` shows                 |
+| -------------- | ----------------------------------------------- | ---------------------------- |
+| `en.json`      | `welcome` reworded, `ok` removed, `home.hero.title` added | `~`, `+`, `-` (not in the project) |
+| `zh-CN.json`   | `cart` reworded, `home.hero.title` added        | `~`, `-`                     |
+| `ja.json`      | `cancel` removed, `settings.profile.nickname` filled | `+`, `?` (no text in the project) |
+| `de.json`      | none                                            | nothing                      |
+
+`localness diff` exits 1 with 7 differences; `localness pull --dry-run` lists what `pull` would write. `pull` overwrites the `~` / `+` entries, so restore the fixtures with `git checkout src/locales` afterwards.
 
 ## Seed contents
 
@@ -48,16 +61,16 @@ After each platform change run **Localness: Refresh**.
 
 ## Custom patterns (off by default)
 
-`src/custom-pattern.ts` needs these extra patterns in the workspace settings. Add them when testing and remove afterwards:
+`src/custom-pattern.ts` needs these extra patterns in `localness.config.json`. Add them when testing and remove afterwards:
 
 ```jsonc
-"localness.keyPatterns": [
+"keyPatterns": [
   "(?<![\\w$.])translate\\(\\s*'([^'\\\\\\n]+)'",
   "(?<![\\w$.])L\\(\\s*\"([^\"\\\\\\n]+)\""
 ]
 ```
 
-Set `"localness.useDefaultKeyPatterns": false` to see only the custom ones.
+Set `"useDefaultKeyPatterns": false` to see only the custom ones.
 
 ## Expected results (display locale zh-CN)
 

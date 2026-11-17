@@ -75,7 +75,7 @@ export function buildProjectData(
 export function projectSetting(
   projects: readonly DeliveryProjectRef[],
   picked: DeliveryProjectRef,
-): string {
+): string | number {
   const sameName = projects.filter((project) => project.name === picked.name)
-  return sameName.length === 1 ? picked.name : String(picked.id)
+  return sameName.length === 1 ? picked.name : picked.id
 }

@@ -11,12 +11,9 @@ function oneOf<T extends string>(values: readonly T[], value: string): T {
   return values.includes(value as T) ? (value as T) : values[0]!
 }
 
+/** Personal settings; project settings live in `localness.config.json`. */
 export interface Settings {
-  baseUrl: string
-  project: string
   displayLocale: string
-  keyPatterns: string[]
-  useDefaultKeyPatterns: boolean
   inlineHints: InlineHintMode
   inlineHintStyle: InlineHintStyle
   replaceRevealOn: ReplaceRevealOn
@@ -29,11 +26,7 @@ export interface Settings {
 export function readSettings(): Settings {
   const config = vscode.workspace.getConfiguration('localness')
   return {
-    baseUrl: config.get('baseUrl', '').trim(),
-    project: config.get('project', '').trim(),
     displayLocale: config.get('displayLocale', '').trim(),
-    keyPatterns: config.get('keyPatterns', []),
-    useDefaultKeyPatterns: config.get('useDefaultKeyPatterns', true),
     inlineHints: oneOf(INLINE_HINT_MODES, config.get('inlineHints', '')),
     inlineHintStyle: oneOf(
       INLINE_HINT_STYLES,

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import type { DataController } from './controller'
 import {
   compilePatterns,
   extractKeys,
@@ -13,22 +14,18 @@ export interface DocumentKey extends KeyMatch {
 
 export class KeyMatcher implements vscode.Disposable {
   #regexes: RegExp[] = []
+  #sources: string | undefined
   readonly #cache = new Map<string, { version: number; keys: DocumentKey[] }>()
   readonly #subscriptions: vscode.Disposable[]
   #reported = false
 
-  constructor(readonly log: vscode.OutputChannel) {
+  constructor(
+    readonly log: vscode.OutputChannel,
+    private readonly controller: DataController,
+  ) {
     this.#compile()
     this.#subscriptions = [
-      vscode.workspace.onDidChangeConfiguration((event) => {
-        if (
-          event.affectsConfiguration('localness.keyPatterns') ||
-          event.affectsConfiguration('localness.useDefaultKeyPatterns')
-        ) {
-          this.#compile()
-          this.#cache.clear()
-        }
-      }),
+      controller.onDidChange(() => this.#compile()),
       vscode.workspace.onDidCloseTextDocument((document) => {
         this.#cache.delete(document.uri.toString())
       }),
@@ -65,15 +62,22 @@ export class KeyMatcher implements vscode.Disposable {
     return keys
   }
 
+  /** Compiles the config's patterns when they differ from the current ones. */
   #compile() {
-    const settings = readSettings()
-    const { regexes, errors } = compilePatterns(
-      patternSources(settings.keyPatterns, settings.useDefaultKeyPatterns),
+    const config = this.controller.config?.config
+    const sources = patternSources(
+      config?.keyPatterns ?? [],
+      config?.useDefaultKeyPatterns ?? true,
     )
+    const signature = JSON.stringify(sources)
+    if (signature === this.#sources) return
+    this.#sources = signature
+    const { regexes, errors } = compilePatterns(sources)
     this.#regexes = regexes
+    this.#cache.clear()
     if (errors.length > 0) {
       void vscode.window.showWarningMessage(
-        `Localness: ignored invalid localness.keyPatterns entries: ${errors
+        `Localness: ignored invalid "keyPatterns" entries in localness.config.json: ${errors
           .map((error) => `${error.source} (${error.message})`)
           .join('; ')}`,
       )

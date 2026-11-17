@@ -4,7 +4,8 @@
     "types": ["node", "vscode"],
     "allowImportingTsExtensions": true,
     "paths": {
-      "@localness/sdk": ["../sdk/src/index.ts"]
+      "@localness/sdk": ["../sdk/src/index.ts"],
+      "@localness/sdk/sync": ["../sdk/src/sync/index.ts"]
     }
   },
   "include": ["src", "test", "tsdown.config.ts", "vitest.config.ts"]

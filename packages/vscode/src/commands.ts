@@ -1,9 +1,13 @@
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { createClient } from '@localness/sdk'
-import { tokenKey, type DataController } from './controller'
+import { CONFIG_FILE_NAME } from '@localness/sdk/sync'
+import { findProjectConfig, tokenKey, type DataController } from './controller'
 import { projectSetting } from './core/data'
 import { describeError } from './core/errors'
 import { localeIcon, localeName } from './core/locales'
+import { withProject } from './core/projectConfig'
 import { isValidBaseUrl, keyUrl, trimBaseUrl } from './core/urls'
 import { editTranslation } from './edit'
 import type { KeyMatcher } from './matcher'
@@ -36,11 +40,59 @@ async function pickProject(
   return picked?.project
 }
 
+/** The config file to use, or where to create one: the active file's workspace folder. */
+async function configPath(): Promise<string | undefined> {
+  const found = await findProjectConfig()
+  if (found) return found
+  const folders = vscode.workspace.workspaceFolders ?? []
+  const uri = vscode.window.activeTextEditor?.document.uri
+  const folder =
+    (uri && vscode.workspace.getWorkspaceFolder(uri)) ??
+    (folders.length === 1
+      ? folders[0]
+      : await vscode.window.showWorkspaceFolderPick({
+          placeHolder: `Folder for ${CONFIG_FILE_NAME}`,
+        }))
+  if (!folder) {
+    if (folders.length === 0) {
+      void vscode.window.showErrorMessage(
+        `Localness: open a folder first; the project is saved in ${CONFIG_FILE_NAME}.`,
+      )
+    }
+    return undefined
+  }
+  return join(folder.uri.fsPath, CONFIG_FILE_NAME)
+}
+
+async function readSource(path: string) {
+  try {
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+async function saveProject(
+  path: string,
+  baseUrl: string,
+  project: string | number,
+) {
+  const source = await readSource(path)
+  const next = withProject(source, baseUrl, project)
+  if (next !== source) await writeFile(path, next, 'utf8')
+}
+
 async function signIn(
   controller: DataController,
   secrets: vscode.SecretStorage,
 ) {
-  let { baseUrl, project } = readSettings()
+  const path = await configPath()
+  if (!path) return
+  const current =
+    controller.config?.path === path ? controller.config.config : undefined
+  let baseUrl = current?.baseUrl ?? ''
+  let project = current?.project
   if (!baseUrl) {
     const input = await vscode.window.showInputBox({
       prompt: 'Localness base URL',
@@ -60,43 +112,47 @@ async function signIn(
   if (!token) return
 
   try {
-    if (!project) {
+    if (project === undefined) {
       const { projects } = await createClient({ baseUrl, token }).projects()
       const picked = await pickProject(projects)
       if (!picked) return
       project = projectSetting(projects, picked)
     }
     await createClient({ baseUrl, token, project }).meta()
+    await secrets.store(tokenKey(baseUrl), token)
+    await saveProject(path, baseUrl, project)
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Localness: ${describeError(error, baseUrl)}`,
     )
     return
   }
-
-  await secrets.store(tokenKey(baseUrl), token)
-  await updateSetting('baseUrl', baseUrl)
-  await updateSetting('project', project)
   await controller.reload(true)
-  void vscode.window.showInformationMessage('Localness: signed in.')
+  void vscode.window.showInformationMessage(
+    `Localness: signed in. The project is saved in ${vscode.workspace.asRelativePath(path)}.`,
+  )
 }
 
 async function selectProject(
   controller: DataController,
   secrets: vscode.SecretStorage,
 ) {
-  const { baseUrl } = readSettings()
+  const loaded = controller.config
+  const baseUrl = loaded?.config.baseUrl
   const token = baseUrl && (await secrets.get(tokenKey(baseUrl)))
-  if (!token) return signIn(controller, secrets)
+  if (!loaded || !token) return signIn(controller, secrets)
   try {
     const { projects } = await createClient({ baseUrl, token }).projects()
     const picked = await pickProject(projects)
-    if (picked) await updateSetting('project', projectSetting(projects, picked))
+    if (!picked) return
+    await saveProject(loaded.path, baseUrl, projectSetting(projects, picked))
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Localness: ${describeError(error, baseUrl)}`,
     )
+    return
   }
+  await controller.reload(true)
 }
 
 type LocaleData = NonNullable<DataController['data']>
@@ -283,7 +339,7 @@ export function registerCommands(
     }),
     register('localness.signIn', () => signIn(controller, secrets)),
     register('localness.signOut', async () => {
-      const { baseUrl } = readSettings()
+      const baseUrl = controller.config?.config.baseUrl
       if (baseUrl) await secrets.delete(tokenKey(baseUrl))
       await controller.reload(true)
     }),
@@ -303,7 +359,7 @@ export function registerCommands(
       await vscode.env.openExternal(
         vscode.Uri.parse(
           keyUrl({
-            baseUrl: controller.client?.baseUrl ?? readSettings().baseUrl,
+            baseUrl: controller.baseUrl,
             projectId: data.projectId,
             keyId,
           }),

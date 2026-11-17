@@ -27,11 +27,20 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@26.6.6)(vite@8.3.7(@types/node@26.6.6))
 
+  packages/cli:
+    dependencies:
+      '@localness/contract':
+        specifier: ^0.4.3
+        version: 0.4.3(zod@4.6.7)
+      '@localness/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+
   packages/sdk:
     dependencies:
       '@localness/contract':
-        specifier: ^0.4.2
-        version: 0.4.2(zod@4.6.7)
+        specifier: ^0.4.3
+        version: 0.4.3(zod@4.6.7)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -69,8 +78,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@localness/contract@0.4.2':
-    resolution: {integrity: sha512-vOGh+h7tkyoHO2aJpr19d5/SJQO4W0r/UzFuGREt4xFYdGeTu/ksBjlnb3KVUuWiHrqrPU10DUWmznx4n5qGUg==}
+  '@localness/contract@0.4.3':
+    resolution: {integrity: sha512-LJUeFAYB3FF8i3QT3otdJgBrnzHzMCVBTzYNinnAwJZAji5Ex8zTOeZG0Do+quL36eYm06m6Mv9D+8zHD+MW6g==}
     peerDependencies:
       zod: ^4.0.0
 
@@ -875,7 +884,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@localness/contract@0.4.2(zod@4.6.7)':
+  '@localness/contract@0.4.3(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 

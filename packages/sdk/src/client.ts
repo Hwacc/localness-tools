@@ -2,6 +2,7 @@ import { LocalnessError } from './errors'
 import { createTransport, normalizeBaseUrl, type FetchLike } from './http'
 import {
   captureKeySearchSchema,
+  captureMatchSchema,
   deliveryBundleSchema,
   deliveryKeyStatesSchema,
   deliveryLocaleSchema,
@@ -12,6 +13,7 @@ import {
   keyNameSuggestionSchema,
   keyWriteResultSchema,
   type CaptureKeySearch,
+  type CaptureMatch,
   type DeliveryBundle,
   type DeliveryKeyState,
   type DeliveryKeyStates,
@@ -96,6 +98,8 @@ export interface LocalnessClient {
   bundle(scope?: Scope): Promise<DeliveryBundle>
   outdated(scope?: Pick<Scope, 'project'>): Promise<DeliveryOutdated>
   searchKeys(q: string, options?: SearchKeysOptions): Promise<CaptureKeySearch>
+  /** Keys whose source text, draft or published, equals each text (whitespace-normalized). One entry per text, in order. */
+  match(texts: readonly string[], scope?: WriteScope): Promise<CaptureMatch>
   keyStates(options: KeyStatesOptions): Promise<KeyStatesResult>
   keyStatePages(options: KeyStatesOptions): AsyncGenerator<DeliveryKeyStates>
   /** Write token. A taken name is a `conflict`. */
@@ -178,6 +182,8 @@ export function createClient(options: ClientOptions): LocalnessClient {
         },
         captureKeySearchSchema,
       ),
+    match: (texts, scope) =>
+      send('POST', '/match', writeQuery(scope), { texts }, captureMatchSchema),
     keyStatePages,
     createKey: (input, scope) =>
       send('POST', '/keys', writeQuery(scope), input, keyWriteResultSchema),

@@ -14,15 +14,15 @@ export function describeError(error: unknown, baseUrl: string): string {
       }
       return 'Access denied. The token may lack permission, or its owner may have left the team.'
     case 'not-found':
-      return `Not found${detail}. Check localness.project.`
+      return `Not found${detail}. Check "project" in localness.config.json.`
     case 'ambiguous-project':
-      return 'The project name matches more than one project. Set localness.project to a project id.'
+      return 'The project name matches more than one project. Set "project" in localness.config.json to a project id.'
     case 'conflict':
       return `Conflict${detail}.`
     case 'bad-request':
-      return `The server rejected the request${detail}. A token that reaches several projects needs localness.project.`
+      return `The server rejected the request${detail}. A token that reaches several projects needs "project" in localness.config.json.`
     case 'network':
-      return `Cannot reach ${baseUrl}. Check localness.baseUrl and your connection.`
+      return `Cannot reach ${baseUrl}. Check "baseUrl" in localness.config.json and your connection.`
     case 'server':
       return `The Localness server failed${detail}. Try again later.`
     case 'invalid-response':

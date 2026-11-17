@@ -1,0 +1,32 @@
+{
+  "name": "@localness/cli",
+  "version": "0.1.0",
+  "description": "Sync a repository's locale JSON files with a Localness project.",
+  "type": "module",
+  "bin": {
+    "localness": "./dist/cli.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hwacc/localness-tools.git",
+    "directory": "packages/cli"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@localness/contract": "^0.4.3",
+    "@localness/sdk": "workspace:*"
+  }
+}

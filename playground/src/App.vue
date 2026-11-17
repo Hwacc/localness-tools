@@ -23,7 +23,7 @@ const done = t(`cart.checkout.done`)
     scope="global"
     keypath="cart_empty_html"
   >
-    <template #default>x</template>
+    <template #default>{{ $t('common_placeholder') }}</template>
   </i18n-t>
   <!-- EXPECT: not-detected bound.keypath.key -- :keypath binding is not supported -->
   <i18n-t :keypath="'bound.keypath.key'" />
