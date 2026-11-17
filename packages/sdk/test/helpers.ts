@@ -6,7 +6,9 @@ export const TOKEN = 'lnk_fake_token_for_tests'
 
 export interface MockCall {
   url: URL
+  method: string
   headers: Record<string, string>
+  body: unknown
 }
 
 export type MockReply =
@@ -17,7 +19,12 @@ export type MockReply =
 export function mockFetch(reply: MockReply | ((call: MockCall) => MockReply)) {
   const calls: MockCall[] = []
   const fn = vi.fn<FetchLike>(async (input, init) => {
-    const call = { url: new URL(input), headers: init?.headers ?? {} }
+    const call = {
+      url: new URL(input),
+      method: init?.method ?? 'GET',
+      headers: init?.headers ?? {},
+      body: init?.body === undefined ? undefined : JSON.parse(init.body),
+    }
     calls.push(call)
     const r = typeof reply === 'function' ? reply(call) : reply
     if ('throws' in r) throw r.throws

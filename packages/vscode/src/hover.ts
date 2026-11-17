@@ -28,9 +28,43 @@ export function hoverInfoFor(
   })
 }
 
+function commandLink(
+  label: string,
+  command: string,
+  arg: object,
+  title: string,
+) {
+  const args = encodeURIComponent(JSON.stringify([arg]))
+  return `[${label}](command:${command}?${args} "${title}")`
+}
+
 export function hoverMarkdown(info: HoverInfo) {
-  const markdown = new vscode.MarkdownString(renderHoverMarkdown(info))
+  const { key } = info
+  const markdown = new vscode.MarkdownString(
+    renderHoverMarkdown(info, {
+      edit: (locale) =>
+        commandLink(
+          '$(edit)',
+          'localness.editTranslation',
+          { key, locale },
+          `Edit ${locale}`,
+        ),
+      title: [commandLink('$(copy)', 'localness.copyKey', { key }, 'Copy key')],
+      footer: [
+        commandLink(
+          '$(globe) Other locales…',
+          'localness.editTranslation',
+          { key },
+          'Edit any locale of this key',
+        ),
+      ],
+    }),
+  )
   markdown.supportThemeIcons = true
+  markdown.supportHtml = true
+  markdown.isTrusted = {
+    enabledCommands: ['localness.editTranslation', 'localness.copyKey'],
+  }
   return markdown
 }
 

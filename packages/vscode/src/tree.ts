@@ -50,6 +50,7 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
     const { state } = node
     const item = new vscode.TreeItem(state.key)
     item.id = `key:${state.id}`
+    item.contextValue = 'key'
     if (data) {
       const text = textFor(state, data.displayLocale)
       item.description = text === undefined ? undefined : truncate(text, 60)

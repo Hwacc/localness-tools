@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["node", "vscode"],
+    "allowImportingTsExtensions": true,
     "paths": {
       "@localness/sdk": ["../sdk/src/index.ts"]
     }

@@ -16,6 +16,40 @@ export function stateFor(
   return state.locales[locale]?.state ?? 'unpublished'
 }
 
+/** The text an edit starts from, and the draft the server checks it against. */
+export function editableText(
+  state: DeliveryKeyState,
+  locale: string,
+): { text: string; expected: string } {
+  const entry = state.locales[locale]
+  return {
+    text: entry?.draftText ?? entry?.publishedText ?? '',
+    expected: entry?.draftText ?? '',
+  }
+}
+
+/** The published text while an unpublished edit differs from it. */
+export function publishedBehind(
+  state: DeliveryKeyState,
+  locale: string,
+): string | undefined {
+  const entry = state.locales[locale]
+  if (entry?.draftText == null || entry.publishedText == null) return undefined
+  return entry.draftText === entry.publishedText
+    ? undefined
+    : entry.publishedText
+}
+
+/** The list with `next` in place of the key of the same id, or appended. */
+export function replaceKeyState(
+  keys: readonly DeliveryKeyState[],
+  next: DeliveryKeyState,
+): DeliveryKeyState[] {
+  const at = keys.findIndex((state) => state.id === next.id)
+  if (at < 0) return [...keys, next]
+  return keys.map((state, index) => (index === at ? next : state))
+}
+
 export const STATE_ICONS: Record<DeliveryLocaleStateName, string> = {
   draft: 'edit',
   published: 'check',

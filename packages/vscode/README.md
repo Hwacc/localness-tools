@@ -4,13 +4,14 @@ Shows Localness translation keys where you use them. Read-only; requires a Local
 
 ## Features
 
-- **Hover** on a key: source text, display-locale text, state (`draft`, `published`, `outdated`, `unpublished`), release ids and an _Open in Localness_ link.
+- **Hover** on a key: one section per locale (the source, then the display locale) with its text, a state badge (`Published`, `Edited`, `Outdated`, `Not published`) and an edit button; an edited locale also shows its published text. The icons next to the key copy it and open it in Localness; the footer edits any other locale.
+- **Edit translations** (`Localness: Edit translation`, the hover buttons, or the pencil in the Keys view): edits any locale of the key under the cursor. The key is reloaded first so the edit starts from the current draft. Edits are saved as drafts; publish them in Localness. If someone changed the draft meanwhile, nothing is overwritten until you edit again. Needs a Read & write token; multi-line texts open in Localness.
 - **Inline hints**: the display-locale text after each key (`inline`, truncated, styled by `localness.inlineHintStyle`) or in place of the key (`replace`; the key reappears per `localness.replaceRevealOn`). Switch with `Localness: Switch inline hint mode`.
 - **Key underline**: keys that exist in the project get a dotted underline.
 - **Diagnostics**: a warning on keys that do not exist in the project (_Key not found in Localness_).
 - **Keys view** (activity bar): keys grouped by namespace with state icons; click a key to open it in Localness.
 - **Search** (`Localness: Search keys`): matches key names and source text, from the local cache first, then the server for larger result sets.
-- **Status bar**: project and display locale; click to switch locale, refresh, select the project or sign in.
+- **Status bar**: project and display locale. Click it for a menu that switches the display locale and hint mode in one step; its title buttons search, refresh, and open project and account actions.
 
 Only the source locale and the display locale are downloaded. Data is kept in memory and cached under the extension's global storage; the cache is shown immediately and refreshed in the background, when the window regains focus, and on `Localness: Refresh`. The cache can contain draft text.
 

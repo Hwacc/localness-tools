@@ -1,5 +1,6 @@
 import type { DeliveryKeyState, DeliveryLocaleStateName } from '@localness/sdk'
-import { stateFor, textFor } from './keys'
+import { localeName } from './locales'
+import { publishedBehind, stateFor, textFor } from './keys'
 
 export interface HoverContext {
   sourceLocale: string
@@ -8,29 +9,46 @@ export interface HoverContext {
   url: string
 }
 
+export interface HoverLocale {
+  locale: string
+  isSource: boolean
+  text: string | undefined
+  /** The published text while an unpublished edit differs from it. */
+  published: string | undefined
+  state: DeliveryLocaleStateName
+}
+
 export interface HoverInfo {
   key: string
-  sourceLocale: string
-  sourceText: string | undefined
-  displayLocale: string
-  displayText: string | undefined
-  state: DeliveryLocaleStateName
+  /** The source first, then the display locale when it differs. */
+  locales: HoverLocale[]
   draft: boolean
   releases: string[]
   url: string
+}
+
+/** Links the editor adds; plain Markdown so the renderer stays testable. */
+export interface HoverLinks {
+  edit?: (locale: string) => string
+  /** Icon buttons after the key name. */
+  title?: readonly string[]
+  footer?: readonly string[]
 }
 
 export function buildHoverInfo(
   state: DeliveryKeyState,
   context: HoverContext,
 ): HoverInfo {
+  const locales = [...new Set([context.sourceLocale, context.displayLocale])]
   return {
     key: state.key,
-    sourceLocale: context.sourceLocale,
-    sourceText: textFor(state, context.sourceLocale),
-    displayLocale: context.displayLocale,
-    displayText: textFor(state, context.displayLocale),
-    state: stateFor(state, context.displayLocale),
+    locales: locales.map((locale) => ({
+      locale,
+      isSource: locale === context.sourceLocale,
+      text: textFor(state, locale),
+      published: publishedBehind(state, locale),
+      state: stateFor(state, locale),
+    })),
     draft: state.draft,
     releases: state.releaseIds.map((id) => {
       const name = context.releaseNames.get(id)
@@ -44,27 +62,52 @@ export function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|<>~&]/g, '\\$&')
 }
 
+const STATE_BADGES: Record<DeliveryLocaleStateName, string> = {
+  published: '$(pass) Published',
+  draft: '$(edit) Edited',
+  outdated: '$(warning) Outdated',
+  unpublished: '$(circle-large-outline) Not published',
+}
+
 function quote(text: string | undefined) {
-  if (text === undefined) return '_none_'
+  if (text === undefined || text === '') return '> _No text_'
   return `> ${escapeMarkdown(text).replace(/\r?\n/g, '  \n> ')}`
 }
 
-export function renderHoverMarkdown(info: HoverInfo): string {
-  const lines = [
-    `**${escapeMarkdown(info.key)}**`,
-    `Source (${escapeMarkdown(info.sourceLocale)}):\n\n${quote(info.sourceText)}`,
-  ]
-  if (info.displayLocale !== info.sourceLocale) {
-    lines.push(
-      `${escapeMarkdown(info.displayLocale)}:\n\n${quote(info.displayText)}`,
-    )
+function localeSection(entry: HoverLocale, edit?: (locale: string) => string) {
+  const title = [
+    `**${escapeMarkdown(entry.locale.toUpperCase())}**`,
+    escapeMarkdown(entry.isSource ? 'Source' : localeName(entry.locale)),
+  ].join(' · ')
+  const header = [title, STATE_BADGES[entry.state], edit?.(entry.locale)]
+    .filter(Boolean)
+    .join('&nbsp;&nbsp;&nbsp;')
+  const body = [quote(entry.text)]
+  if (entry.published !== undefined) {
+    body.push('>', `> _Published:_ ${escapeMarkdown(entry.published)}`)
   }
-  const status = [`State: ${info.state}`]
-  if (info.draft) status.push('key is a draft')
-  lines.push(status.join(' · '))
-  lines.push(
-    `Releases: ${info.releases.length > 0 ? info.releases.map(escapeMarkdown).join(', ') : 'none'}`,
-  )
-  lines.push(`[Open in Localness](${info.url})`)
-  return lines.join('\n\n')
+  return `${header}\n\n${body.join('\n')}`
+}
+
+export function renderHoverMarkdown(
+  info: HoverInfo,
+  links: HoverLinks = {},
+): string {
+  const title = [
+    [
+      `$(key) **\`${info.key.replace(/`/g, "'")}\`**`,
+      ...(links.title ?? []),
+      `[$(link-external)](${info.url} "Open in Localness")`,
+    ].join(' '),
+  ]
+  if (info.draft) title.push('$(circle-filled) Unpublished changes')
+  const releases =
+    info.releases.length > 0
+      ? info.releases.map(escapeMarkdown).join(', ')
+      : 'none'
+  return [
+    `${title.join('&nbsp;&nbsp;&nbsp;')}  \nReleases: ${releases}`,
+    ...info.locales.map((entry) => localeSection(entry, links.edit)),
+    ...(links.footer?.length ? [links.footer.join(' · ')] : []),
+  ].join('\n\n---\n\n')
 }

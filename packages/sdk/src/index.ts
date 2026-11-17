@@ -1,11 +1,14 @@
-export { createClient } from './client'
+export { createClient, draftConflictOf } from './client'
 export type {
   ClientOptions,
+  CreateKeyInput,
   KeyStatesOptions,
   KeyStatesResult,
   LocalnessClient,
   Scope,
   SearchKeysOptions,
+  UpdateKeyInput,
+  WriteScope,
 } from './client'
 export { LocalnessError, errorCodes } from './errors'
 export type { LocalnessErrorCode } from './errors'

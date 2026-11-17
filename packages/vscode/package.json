@@ -71,10 +71,25 @@
         "command": "localness.showMenu",
         "title": "Show menu",
         "category": "Localness"
+      },
+      {
+        "command": "localness.editTranslation",
+        "title": "Edit translation",
+        "category": "Localness",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "localness.copyKey",
+        "title": "Copy key",
+        "category": "Localness"
       }
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "localness.copyKey",
+          "when": "false"
+        },
         {
           "command": "localness.openKey",
           "when": "false"
@@ -99,6 +114,13 @@
           "command": "localness.refresh",
           "when": "view == localness.keys",
           "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "localness.editTranslation",
+          "when": "view == localness.keys && viewItem == key",
+          "group": "inline"
         }
       ]
     },
@@ -255,6 +277,7 @@
   },
   "devDependencies": {
     "@localness/sdk": "workspace:*",
-    "@types/vscode": "~1.90.0"
+    "@types/vscode": "~1.90.0",
+    "flag-icons": "^7.6.0"
   }
 }

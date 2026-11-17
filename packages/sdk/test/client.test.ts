@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LocalnessError, createClient } from '../src'
+import { LocalnessError, createClient, draftConflictOf } from '../src'
 import { BASE_URL, TOKEN, mockFetch } from './helpers'
 
 function stateKey(id: number) {
@@ -149,6 +149,14 @@ describe('keyStates pagination', () => {
     expect(calls[0]!.url.searchParams.get('limit')).toBe('5000')
   })
 
+  it('narrows to named keys and omits locales for all of them', async () => {
+    const { fetch, calls } = paged()
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    await client.keyStates({ keys: ['a.b', 'c'], pageSize: 99999 })
+    expect(calls[0]!.url.searchParams.get('keys')).toBe('a.b,c')
+    expect(calls[0]!.url.searchParams.has('locales')).toBe(false)
+  })
+
   it('iterates pages lazily', async () => {
     const { fetch, calls } = paged()
     const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
@@ -172,6 +180,61 @@ describe('keyStates pagination', () => {
     const result = await client.keyStates({ locales: ['en'], pageSize: 2 })
     expect(result.keys).toEqual([])
     expect(calls).toHaveLength(1)
+  })
+})
+
+describe('key writes', () => {
+  const written = { sourceLocale: 'en', created: true, key: stateKey(9) }
+
+  it('posts a new key as JSON with the project', async () => {
+    const { fetch, calls } = mockFetch({ body: written })
+    const client = createClient({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      project: 'web',
+      fetch,
+    })
+    await expect(
+      client.createKey({ key: 'cart.buy', sourceText: 'Buy' }),
+    ).resolves.toEqual(written)
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      body: { key: 'cart.buy', sourceText: 'Buy' },
+      headers: { 'content-type': 'application/json' },
+    })
+    expect(calls[0]!.url.pathname).toBe('/api/v1/keys')
+    expect(calls[0]!.url.searchParams.get('project')).toBe('web')
+  })
+
+  it('maps a stale draft to a conflict carrying the current state', async () => {
+    const current = stateKey(9)
+    const { fetch, calls } = mockFetch({
+      status: 409,
+      body: {
+        statusMessage: 'Draft changed since it was read: ja',
+        data: { locales: ['ja'], key: current },
+      },
+    })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const error = await client
+      .updateKey({ key: 'k9', locales: { ja: { text: 'y', expected: '' } } })
+      .catch((e: unknown) => e)
+    expect(calls[0]!.method).toBe('PATCH')
+    expect(error).toMatchObject({ code: 'conflict', status: 409 })
+    expect(draftConflictOf(error)).toEqual({ locales: ['ja'], key: current })
+  })
+
+  it('has no draft conflict for a taken name', async () => {
+    const { fetch } = mockFetch({
+      status: 409,
+      body: { statusMessage: 'Key "a" already exists' },
+    })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const error = await client
+      .createKey({ key: 'a', sourceText: 'A' })
+      .catch((e: unknown) => e)
+    expect(error).toMatchObject({ code: 'conflict' })
+    expect(draftConflictOf(error)).toBeUndefined()
   })
 })
 

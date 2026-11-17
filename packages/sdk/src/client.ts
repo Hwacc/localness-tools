@@ -1,3 +1,4 @@
+import { LocalnessError } from './errors'
 import { createTransport, normalizeBaseUrl, type FetchLike } from './http'
 import {
   captureKeySearchSchema,
@@ -7,6 +8,9 @@ import {
   deliveryMetaSchema,
   deliveryOutdatedSchema,
   deliveryProjectsSchema,
+  keyDraftConflictSchema,
+  keyNameSuggestionSchema,
+  keyWriteResultSchema,
   type CaptureKeySearch,
   type DeliveryBundle,
   type DeliveryKeyState,
@@ -15,6 +19,9 @@ import {
   type DeliveryMeta,
   type DeliveryOutdated,
   type DeliveryProjects,
+  type KeyDraftConflict,
+  type KeyNameSuggestion,
+  type KeyWriteResult,
 } from './schemas'
 
 export const DEFAULT_KEY_STATES_PAGE_SIZE = 1000
@@ -42,7 +49,10 @@ export interface SearchKeysOptions {
 }
 
 export interface KeyStatesOptions extends Scope {
-  locales: readonly string[]
+  /** Omit for every project locale. */
+  locales?: readonly string[]
+  /** Only these key names; unknown names are left out. */
+  keys?: readonly string[]
   /** Keys per request; clamped to the server maximum of 5000. */
   pageSize?: number
 }
@@ -52,6 +62,29 @@ export interface KeyStatesResult {
   keys: DeliveryKeyState[]
   total: number
   generatedAt: string
+}
+
+export type WriteScope = Pick<Scope, 'project'>
+
+export interface CreateKeyInput {
+  /** Omit to get the text's `__unnamed_` placeholder, a draft named later. A named key publishes its source text. */
+  key?: string
+  sourceText: string
+}
+
+export interface UpdateKeyInput {
+  key: string
+  /** Per locale: the new draft and the draft last read (`''` when there was none). */
+  locales: Record<string, { text: string; expected: string }>
+}
+
+/** The current state behind a `conflict` from `updateKey`, or undefined for any other error. */
+export function draftConflictOf(error: unknown): KeyDraftConflict | undefined {
+  if (!(error instanceof LocalnessError) || error.code !== 'conflict') {
+    return undefined
+  }
+  const parsed = keyDraftConflictSchema.safeParse(error.data)
+  return parsed.success ? parsed.data : undefined
 }
 
 export interface LocalnessClient {
@@ -65,13 +98,25 @@ export interface LocalnessClient {
   searchKeys(q: string, options?: SearchKeysOptions): Promise<CaptureKeySearch>
   keyStates(options: KeyStatesOptions): Promise<KeyStatesResult>
   keyStatePages(options: KeyStatesOptions): AsyncGenerator<DeliveryKeyStates>
+  /** Write token. A taken name is a `conflict`. */
+  createKey(input: CreateKeyInput, scope?: WriteScope): Promise<KeyWriteResult>
+  /** Write token. Edits drafts only; a stale `expected` is a `conflict`, see `draftConflictOf`. */
+  updateKey(input: UpdateKeyInput, scope?: WriteScope): Promise<KeyWriteResult>
+  /** Write token; spends the project's AI quota and writes nothing. */
+  suggestKeyName(
+    sourceText: string,
+    scope?: WriteScope,
+  ): Promise<KeyNameSuggestion>
 }
 
 export function createClient(options: ClientOptions): LocalnessClient {
   const baseUrl = normalizeBaseUrl(options.baseUrl)
   const transport = createTransport({ ...options, baseUrl })
 
-  const { get } = transport
+  const { get, send } = transport
+  const writeQuery = (scope?: WriteScope) => ({
+    project: scope?.project ?? options.project,
+  })
 
   function scoped(scope: Scope = {}) {
     return {
@@ -86,7 +131,11 @@ export function createClient(options: ClientOptions): LocalnessClient {
       Math.max(opts.pageSize ?? DEFAULT_KEY_STATES_PAGE_SIZE, 1),
       MAX_KEY_STATES_PAGE_SIZE,
     )
-    const base = { ...scoped(opts), locales: opts.locales.join(',') }
+    const base = {
+      ...scoped(opts),
+      locales: opts.locales?.join(','),
+      keys: opts.keys?.join(','),
+    }
     let offset = 0
     while (true) {
       const page = await get(
@@ -130,6 +179,18 @@ export function createClient(options: ClientOptions): LocalnessClient {
         captureKeySearchSchema,
       ),
     keyStatePages,
+    createKey: (input, scope) =>
+      send('POST', '/keys', writeQuery(scope), input, keyWriteResultSchema),
+    updateKey: (input, scope) =>
+      send('PATCH', '/keys', writeQuery(scope), input, keyWriteResultSchema),
+    suggestKeyName: (sourceText, scope) =>
+      send(
+        'POST',
+        '/keys/suggest-name',
+        writeQuery(scope),
+        { sourceText },
+        keyNameSuggestionSchema,
+      ),
     async keyStates(opts) {
       const keys: DeliveryKeyState[] = []
       let first: DeliveryKeyStates | undefined

@@ -3,10 +3,12 @@ import {
   FileStore,
   createCachedResource,
   createClient,
+  type DeliveryKeyState,
   type LocalnessClient,
 } from '@localness/sdk'
 import { buildProjectData, resolveLocales, type ProjectData } from './core/data'
 import { describeError } from './core/errors'
+import { buildIndex, replaceKeyState } from './core/keys'
 import { trimBaseUrl } from './core/urls'
 import { readSettings } from './settings'
 
@@ -136,6 +138,15 @@ export class DataController implements vscode.Disposable {
 
   #set(status: Status) {
     this.#status = status
+    this.#changed.fire()
+  }
+
+  /** Puts a key the server just returned into the loaded data. */
+  applyKeyState(state: DeliveryKeyState) {
+    const data = this.#data
+    if (!data) return
+    const keys = replaceKeyState(data.keys, state)
+    this.#data = { ...data, keys, index: buildIndex(keys) }
     this.#changed.fire()
   }
 

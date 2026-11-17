@@ -3,7 +3,10 @@ import { createClient } from '@localness/sdk'
 import { tokenKey, type DataController } from './controller'
 import { projectSetting } from './core/data'
 import { describeError } from './core/errors'
+import { localeIcon, localeName } from './core/locales'
 import { isValidBaseUrl, keyUrl, trimBaseUrl } from './core/urls'
+import { editTranslation } from './edit'
+import type { KeyMatcher } from './matcher'
 import { searchKeys } from './search'
 import {
   INLINE_HINT_MODES,
@@ -96,7 +99,29 @@ async function selectProject(
   }
 }
 
-async function switchDisplayLocale(controller: DataController) {
+type LocaleData = NonNullable<DataController['data']>
+
+function localeItem(
+  locale: string,
+  data: LocaleData,
+  extensionUri: vscode.Uri,
+) {
+  const icon = localeIcon(locale)
+  return {
+    label: localeName(locale),
+    description: [locale, locale === data.sourceLocale ? 'source' : '']
+      .filter(Boolean)
+      .join(' · '),
+    iconPath: icon
+      ? vscode.Uri.joinPath(extensionUri, icon)
+      : new vscode.ThemeIcon('globe'),
+  }
+}
+
+async function switchDisplayLocale(
+  controller: DataController,
+  extensionUri: vscode.Uri,
+) {
   const data = controller.data
   if (!data) {
     void vscode.window.showWarningMessage('Localness: no project data loaded.')
@@ -109,31 +134,32 @@ async function switchDisplayLocale(controller: DataController) {
     return
   }
   const picked = await vscode.window.showQuickPick(
-    data.locales.map((locale) => ({
-      label: locale,
-      description: [
-        locale === data.displayLocale ? 'current' : '',
-        locale === data.sourceLocale ? 'source' : '',
-      ]
-        .filter(Boolean)
-        .join(', '),
-    })),
-    { placeHolder: 'Display locale' },
+    data.locales.map((locale) => {
+      const item = localeItem(locale, data, extensionUri)
+      return {
+        ...item,
+        label:
+          locale === data.displayLocale ? `${item.label} $(check)` : item.label,
+        locale,
+      }
+    }),
+    { placeHolder: 'Display locale', matchOnDescription: true },
   )
-  if (picked) await updateSetting('displayLocale', picked.label)
+  if (picked) await updateSetting('displayLocale', picked.locale)
+}
+
+const HINT_MODE_DETAILS: Record<InlineHintMode, string> = {
+  inline: 'Translation after the key',
+  replace: 'Translation in place of the key',
+  off: 'No inline hints',
 }
 
 async function switchInlineHintMode() {
   const current = readSettings().inlineHints
-  const labels: Record<InlineHintMode, string> = {
-    inline: 'Inline — show the translation after the key',
-    replace: 'Replace — show the translation in place of the key',
-    off: 'Off',
-  }
   const picked = await vscode.window.showQuickPick(
     INLINE_HINT_MODES.map((mode) => ({
       label: mode,
-      detail: labels[mode],
+      detail: HINT_MODE_DETAILS[mode],
       description: mode === current ? 'current' : '',
     })),
     { placeHolder: 'Inline hint mode' },
@@ -141,43 +167,120 @@ async function switchInlineHintMode() {
   if (picked) await updateSetting('inlineHints', picked.label)
 }
 
-async function showMenu(controller: DataController) {
-  const status = controller.status
-  const actions: Array<vscode.QuickPickItem & { command: string }> = []
-  if (status.kind === 'ready' || status.kind === 'error') {
-    actions.push(
-      {
-        label: '$(globe) Switch display locale',
-        command: 'localness.switchDisplayLocale',
-      },
-      {
-        label: '$(eye) Switch inline hint mode',
-        command: 'localness.switchInlineHintMode',
-      },
-      { label: '$(refresh) Refresh', command: 'localness.refresh' },
-      { label: '$(search) Search keys', command: 'localness.searchKeys' },
-    )
+type MenuItem = vscode.QuickPickItem & {
+  run?: () => Thenable<unknown> | Promise<unknown>
+}
+
+const SEPARATOR = vscode.QuickPickItemKind.Separator
+
+function radio(selected: boolean) {
+  return selected ? '$(pass-filled)' : '$(circle-large-outline)'
+}
+
+function accountItems(): MenuItem[] {
+  const run = (command: string) => () => vscode.commands.executeCommand(command)
+  return [
+    {
+      label: '$(project) Select project',
+      run: run('localness.selectProject'),
+    },
+    { label: '$(key) Sign in', run: run('localness.signIn') },
+    { label: '$(sign-out) Sign out', run: run('localness.signOut') },
+  ]
+}
+
+function showMenu(controller: DataController, extensionUri: vscode.Uri) {
+  const { status, data } = controller
+  const settings = readSettings()
+  const pick = vscode.window.createQuickPick<MenuItem>()
+  const searchButton = {
+    iconPath: new vscode.ThemeIcon('search'),
+    tooltip: 'Search keys',
   }
-  actions.push(
-    { label: '$(project) Select project', command: 'localness.selectProject' },
-    { label: '$(key) Sign in', command: 'localness.signIn' },
-    { label: '$(sign-out) Sign out', command: 'localness.signOut' },
-  )
-  const picked = await vscode.window.showQuickPick(actions, {
-    placeHolder:
-      status.kind === 'error' || status.kind === 'unconfigured'
-        ? status.message
-        : 'Localness',
+  const refreshButton = {
+    iconPath: new vscode.ThemeIcon('refresh'),
+    tooltip: 'Refresh',
+  }
+  const accountButton = {
+    iconPath: new vscode.ThemeIcon('gear'),
+    tooltip: 'Project and account',
+  }
+  const title = data ? `Localness · ${data.projectName}` : 'Localness'
+  const placeholder =
+    status.kind === 'error' || status.kind === 'unconfigured'
+      ? status.message
+      : 'Type to filter'
+
+  const showAccount = (back: boolean) => {
+    pick.title = back ? `${title} · Project and account` : title
+    pick.placeholder = back ? '' : placeholder
+    pick.buttons = back ? [vscode.QuickInputButtons.Back] : []
+    pick.items = accountItems()
+  }
+
+  const showMain = () => {
+    if (!data) return showAccount(false)
+    const locales: MenuItem[] = data.locales.map((locale) => {
+      const item = localeItem(locale, data, extensionUri)
+      return {
+        ...item,
+        label: `${radio(locale === data.displayLocale)} ${item.label}`,
+        run: () => updateSetting('displayLocale', locale),
+      }
+    })
+    pick.title = title
+    pick.placeholder = placeholder
+    pick.buttons = [searchButton, refreshButton, accountButton]
+    pick.matchOnDescription = true
+    pick.items = [
+      { label: 'Display locale', kind: SEPARATOR },
+      ...locales,
+      { label: 'Hint mode', kind: SEPARATOR },
+      ...INLINE_HINT_MODES.map((mode) => ({
+        label: `${radio(mode === settings.inlineHints)} ${mode}`,
+        description: HINT_MODE_DETAILS[mode],
+        run: () => updateSetting('inlineHints', mode),
+      })),
+    ]
+    const current = locales[data.locales.indexOf(data.displayLocale)]
+    if (current) pick.activeItems = [current]
+  }
+
+  const runCommand = (command: string) => {
+    pick.hide()
+    void vscode.commands.executeCommand(command)
+  }
+  pick.onDidTriggerButton((button) => {
+    if (button === searchButton) runCommand('localness.searchKeys')
+    else if (button === refreshButton) runCommand('localness.refresh')
+    else if (button === accountButton) showAccount(true)
+    else if (button === vscode.QuickInputButtons.Back) showMain()
   })
-  if (picked) await vscode.commands.executeCommand(picked.command)
+  pick.onDidAccept(() => {
+    const [item] = pick.selectedItems
+    pick.hide()
+    void item?.run?.()
+  })
+  pick.onDidHide(() => pick.dispose())
+  showMain()
+  pick.show()
 }
 
 export function registerCommands(
   controller: DataController,
-  secrets: vscode.SecretStorage,
+  matcher: KeyMatcher,
+  { secrets, extensionUri }: vscode.ExtensionContext,
 ): vscode.Disposable {
   const register = vscode.commands.registerCommand
   return vscode.Disposable.from(
+    register('localness.editTranslation', (arg?: unknown) =>
+      editTranslation(controller, matcher, arg),
+    ),
+    register('localness.copyKey', async (arg?: { key?: unknown }) => {
+      if (typeof arg?.key !== 'string') return
+      await vscode.env.clipboard.writeText(arg.key)
+      vscode.window.setStatusBarMessage(`Copied ${arg.key}`, 2000)
+    }),
     register('localness.signIn', () => signIn(controller, secrets)),
     register('localness.signOut', async () => {
       const { baseUrl } = readSettings()
@@ -188,12 +291,12 @@ export function registerCommands(
       selectProject(controller, secrets),
     ),
     register('localness.switchDisplayLocale', () =>
-      switchDisplayLocale(controller),
+      switchDisplayLocale(controller, extensionUri),
     ),
     register('localness.switchInlineHintMode', switchInlineHintMode),
     register('localness.refresh', () => controller.reload(true)),
     register('localness.searchKeys', () => searchKeys(controller)),
-    register('localness.showMenu', () => showMenu(controller)),
+    register('localness.showMenu', () => showMenu(controller, extensionUri)),
     register('localness.openKey', async (keyId: number) => {
       const data = controller.data
       if (!data) return

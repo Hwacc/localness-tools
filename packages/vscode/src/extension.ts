@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
     registerHover(controller, matcher),
     registerInlineHints(controller, matcher),
     registerDiagnostics(controller, matcher),
-    registerCommands(controller, context.secrets),
+    registerCommands(controller, matcher, context),
     context.secrets.onDidChange((event) => {
       if (event.key.startsWith('localness.token:')) void controller.reload(true)
     }),

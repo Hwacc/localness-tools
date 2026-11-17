@@ -1,5 +1,6 @@
 **
 !dist/extension.cjs
+!dist/flags/**
 !media/**
 !package.json
 !README.md

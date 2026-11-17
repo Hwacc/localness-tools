@@ -31,6 +31,8 @@ const hits = await client.searchKeys('welcome', { limit: 20 })
 
 // Draft-visible per-key, per-locale state. Pages through the server limit for you.
 const { keys, sourceLocale } = await client.keyStates({ locales: ['en', 'ja'] })
+// Omit `locales` for every locale; `keys` narrows to named keys.
+const [one] = (await client.keyStates({ keys: ['app.welcome'] })).keys
 
 // Or stream page by page.
 for await (const page of client.keyStatePages({
@@ -43,16 +45,37 @@ for await (const page of client.keyStatePages({
 
 Every method takes an optional `project` (on its scope or options) that overrides the client default.
 
+### Writes
+
+Writes need a Read & write token. Translations and unnamed keys land in drafts; publishing stays in Localness.
+
+```ts
+// A named key publishes its source text; without `key` you get an unnamed draft.
+await client.createKey({ key: 'app.welcome', sourceText: 'Welcome' })
+
+// `expected` is the draft you read (`draftText ?? ''`); a mismatch throws `conflict`.
+const { key } = await client.updateKey({
+  key: 'app.welcome',
+  locales: { ja: { text: 'ようこそ', expected: '' } },
+})
+
+// Spends AI quota.
+const suggestion = await client.suggestKeyName('Welcome back')
+```
+
+When a draft changed since it was read, `draftConflictOf(error)` returns the locales that differ and the key's current state; nothing was written. A taken key name is a `conflict` with no draft data.
+
 ### Errors
 
-Failures are thrown as `LocalnessError` with `code`, `status` (when the server answered) and `serverMessage`. Messages never contain the token or the query string.
+Failures are thrown as `LocalnessError` with `code`, `status` (when the server answered), `serverMessage` and `data` (the server's error data, if any). Messages never contain the token or the query string.
 
 | `code`              | When                                                    |
 | ------------------- | ------------------------------------------------------- |
 | `auth`              | 401: missing, invalid or revoked token                  |
 | `forbidden`         | 403: read-only token, or the owner left the team        |
-| `not-found`         | 404: unknown project, release or namespace              |
-| `ambiguous-project` | 409: the project name matches more than one project     |
+| `not-found`         | 404: unknown project, release, namespace or key         |
+| `ambiguous-project` | 409 on reads: the project name matches several projects |
+| `conflict`          | 409 on writes: a stale draft or a taken key name        |
 | `bad-request`       | other 4xx, e.g. 400 when `project` is required          |
 | `server`            | 5xx                                                     |
 | `network`           | the request never got an answer (`cause` has the error) |

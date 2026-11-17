@@ -10,6 +10,7 @@ import {
   resolveLocales,
 } from '../src/core/data'
 import { describeError } from '../src/core/errors'
+import { localeIcon, localeName } from '../src/core/locales'
 import {
   buildHoverInfo,
   escapeMarkdown,
@@ -17,10 +18,13 @@ import {
 } from '../src/core/hover'
 import {
   buildIndex,
+  editableText,
   findMissingKeys,
   hintOffset,
   hintText,
   isRevealed,
+  publishedBehind,
+  replaceKeyState,
   searchCached,
   stateFor,
   textFor,
@@ -57,6 +61,31 @@ describe('key state helpers', () => {
     expect(textFor(bye, 'ja')).toBeUndefined()
     expect(stateFor(bye, 'ja')).toBe('unpublished')
     expect(stateFor(welcome, 'ja')).toBe('draft')
+  })
+
+  it('edits from the draft and reports a published text it hides', () => {
+    expect(editableText(welcome, 'ja')).toEqual({
+      text: 'ようこそ',
+      expected: 'ようこそ',
+    })
+    expect(editableText(welcome, 'en')).toEqual({
+      text: 'Welcome',
+      expected: '',
+    })
+    expect(editableText(bye, 'ja')).toEqual({ text: '', expected: '' })
+    expect(publishedBehind(welcome, 'en')).toBeUndefined()
+    const edited = state(1, 'app.welcome', {
+      en: { draftText: 'Hi', publishedText: 'Welcome', state: 'published' },
+    })
+    expect(publishedBehind(edited, 'en')).toBe('Welcome')
+  })
+
+  it('replaces a key state by id or appends it', () => {
+    const renamed = { ...welcome, key: 'app.hello' }
+    expect(replaceKeyState(keys, renamed)).toEqual([renamed, bye])
+    const extra = state(3, 'app.new', {})
+    expect(replaceKeyState(keys, extra)).toEqual([welcome, bye, extra])
+    expect(keys).toEqual([welcome, bye])
   })
 
   it('finds keys missing from the index', () => {
@@ -112,36 +141,69 @@ describe('hover', () => {
     url: 'https://localness.example.com/translations?project=1&key=1&scope=all',
   }
 
-  it('collects texts, state, releases and url', () => {
+  it('lists the source first, then the display locale, once', () => {
     const info = buildHoverInfo(welcome, context)
-    expect(info).toMatchObject({
-      sourceText: 'Welcome',
-      displayText: 'ようこそ',
-      state: 'draft',
-      releases: ['v1 (#7)', '#9'],
-    })
+    expect(info.locales).toEqual([
+      {
+        locale: 'en',
+        isSource: true,
+        text: 'Welcome',
+        published: undefined,
+        state: 'published',
+      },
+      {
+        locale: 'ja',
+        isSource: false,
+        text: 'ようこそ',
+        published: undefined,
+        state: 'draft',
+      },
+    ])
+    expect(info.releases).toEqual(['v1 (#7)', '#9'])
+    const same = buildHoverInfo(bye, { ...context, displayLocale: 'en' })
+    expect(same.locales.map((entry) => entry.locale)).toEqual(['en'])
   })
 
-  it('renders markdown with the link and escapes text', () => {
-    const markdown = renderHoverMarkdown(buildHoverInfo(welcome, context))
-    expect(markdown).toContain(
-      '[Open in Localness](https://localness.example.com',
+  it('renders sections with badges, edit links and the footer', () => {
+    const markdown = renderHoverMarkdown(buildHoverInfo(welcome, context), {
+      edit: (locale) => `[e:${locale}]`,
+      title: ['[c]'],
+      footer: ['[Other]'],
+    })
+    const sections = markdown.split('\n\n---\n\n')
+    expect(sections).toHaveLength(4)
+    expect(sections[0]).toMatch(
+      /\*\*`app\.welcome`\*\* \[c\] \[\$\(link-external\)\]\(https:[^ ]+ "Open in Localness"\)/,
     )
-    expect(markdown).toContain('State: draft')
-    expect(markdown).toContain('v1 \\(\\#7\\), \\#9')
+    expect(sections[0]).toContain('Releases: v1 \\(\\#7\\), \\#9')
+    expect(sections[1]).toMatch(/^\*\*EN\*\* · Source.*Published.*\[e:en\]/)
+    expect(sections[2]).toMatch(/^\*\*JA\*\* · .*\$\(edit\) Edited.*\[e:ja\]/)
+    expect(sections[3]).toBe('[Other]')
+    expect(
+      renderHoverMarkdown(buildHoverInfo(bye, context)).split('\n\n---\n\n'),
+    ).toHaveLength(3)
     expect(escapeMarkdown('*a* <b>')).toBe('\\*a\\* \\<b\\>')
   })
 
-  it('shows none for missing translations and skips a duplicate locale', () => {
-    const missing = renderHoverMarkdown(buildHoverInfo(bye, context))
-    expect(missing).toContain('_none_')
-    const same = renderHoverMarkdown(
-      buildHoverInfo(bye, { ...context, displayLocale: 'en' }),
+  it('marks missing text and the published text behind an edit', () => {
+    expect(renderHoverMarkdown(buildHoverInfo(bye, context))).toContain(
+      '> _No text_',
     )
-    expect(same.match(/Goodbye/g)).toHaveLength(1)
+    const edited = state(
+      3,
+      'app.edited',
+      {
+        en: { draftText: 'Hi!', publishedText: 'Hi', state: 'draft' },
+        ja: { draftText: 'やあ', publishedText: 'やあ', state: 'published' },
+      },
+      { draft: true },
+    )
+    const markdown = renderHoverMarkdown(buildHoverInfo(edited, context))
+    expect(markdown).toContain('Unpublished changes')
+    expect(markdown).toContain('> Hi\\!\n>\n> _Published:_ Hi')
+    expect(markdown.match(/_Published:_/g)).toHaveLength(1)
   })
 })
-
 describe('project data', () => {
   const meta = {
     project: { id: 5, name: 'web' },
@@ -207,5 +269,41 @@ describe('describeError', () => {
 
   it('passes other errors through', () => {
     expect(describeError(new Error('boom'), 'u')).toBe('boom')
+  })
+
+  it('explains a read-only token and a conflict', () => {
+    const readOnly = new LocalnessError('forbidden', 'x', {
+      serverMessage: 'This API token is read-only',
+    })
+    expect(describeError(readOnly, 'u')).toContain('Read & write token')
+    const taken = new LocalnessError('conflict', 'x', {
+      serverMessage: 'Key already exists',
+    })
+    expect(describeError(taken, 'u')).toBe('Conflict (Key already exists).')
+  })
+})
+
+describe('locales', () => {
+  it('names locales in their own language', () => {
+    expect(localeName('de')).toBe('Deutsch')
+    expect(localeName('ja')).toBe('日本語')
+    expect(localeName('not a locale')).toBe('not a locale')
+  })
+
+  it('names Chinese by script', () => {
+    for (const locale of ['zh', 'zh_CN', 'zh-SG', 'zh-Hans'])
+      expect(localeName(locale)).toBe('中文（简体）')
+    for (const locale of ['zh_tw', 'zh-HK', 'zh-Hant'])
+      expect(localeName(locale)).toBe('中文（繁体）')
+  })
+
+  it('picks a flag or script badge', () => {
+    expect(localeIcon('ja')).toBe('dist/flags/jp.svg')
+    expect(localeIcon('en')).toBe('dist/flags/us.svg')
+    expect(localeIcon('zh_CN')).toBe('media/zh-hans.svg')
+    expect(localeIcon('zh-TW')).toBe('media/zh-hant.svg')
+    expect(localeIcon('es-419')).toBeUndefined()
+    expect(localeIcon('is')).toBeUndefined()
+    expect(localeIcon('not a locale')).toBeUndefined()
   })
 })
