@@ -7,6 +7,7 @@ import { groupLocaleFiles, matchLocales } from '../src/init'
 import { parseEnvFile } from '../src/env'
 import { run } from '../src/run'
 import { clientOf } from '../src/shared'
+import { skillDirsFor } from '../src/skill'
 
 const BASE_URL = 'https://localness.example.com'
 
@@ -348,6 +349,92 @@ describe('commands', () => {
     expect(await cli(['diff'], fetch, 'lnk_env'), err.join('')).toBe(0)
     expect(seen).not.toHaveLength(0)
     expect(seen.every((value) => value === 'Bearer lnk_file')).toBe(true)
+  })
+
+  it('skill install writes one Skill, keeps hand edits and flags old copies', async () => {
+    await mkdir(join(root, '.git'))
+    await put(
+      'app/localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    const skill = join(root, '.claude/skills/localness/SKILL.md')
+    const install = (...args: string[]) =>
+      run(['skill', 'install', ...args], {
+        cwd: join(root, 'app'),
+        env: {},
+        stdout: (text) => out.push(text),
+        stderr: (text) => err.push(text),
+      })
+
+    expect(await install(), err.join('')).toBe(0)
+    const text = await readFile(skill, 'utf8')
+    expect(text).toMatch(/^name: localness$/m)
+    expect(text).not.toMatch(/\{\{version\}\}|localness-hash: ''/)
+    out.length = 0
+    expect(await install()).toBe(0)
+    expect(out.join('')).toMatch(/unchanged/)
+
+    await writeFile(skill, `${text}\nExtra rule.\n`)
+    expect(await install()).toBe(2)
+    expect(await readFile(skill, 'utf8')).toMatch(/Extra rule/)
+    expect(await install('--force')).toBe(0)
+    expect(await readFile(skill, 'utf8')).toBe(text)
+
+    await writeFile(
+      skill,
+      text.replace(/localness-cli: '[^']*'/, "localness-cli: '0.0.1'"),
+    )
+    await cli(['diff'], platform({}))
+    expect(err.join('')).toMatch(/is for CLI 0\.0\.1/)
+  })
+
+  it('skill install --agents-md adds or replaces its block', async () => {
+    await mkdir(join(root, '.git'))
+    await put('AGENTS.md', '# Repo\n\nBuild with pnpm.\n')
+    const install = () =>
+      cli(['skill', 'install', '--agent', 'codex', '--agents-md'], platform({}))
+
+    expect(await install(), err.join('')).toBe(0)
+    expect(await install()).toBe(0)
+    const agents = await readFile(join(root, 'AGENTS.md'), 'utf8')
+    expect(agents).toMatch(
+      /^# Repo\n\nBuild with pnpm\.\n\n<!-- localness:start -->/,
+    )
+    expect(agents.match(/localness:start/g)).toHaveLength(1)
+    expect(agents).toContain('.agents/skills/localness/SKILL.md')
+  })
+
+  it('skill install --root puts it in a subfolder and diff still checks it', async () => {
+    await mkdir(join(root, '.git'))
+    await put(
+      'app/localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    expect(await cli(['skill', 'install', '--root', 'app'], platform({}))).toBe(
+      0,
+    )
+    const skill = join(root, 'app/.claude/skills/localness/SKILL.md')
+    const text = await readFile(skill, 'utf8')
+    await writeFile(
+      skill,
+      text.replace(/localness-cli: '[^']*'/, "localness-cli: '0.0.1'"),
+    )
+    await cli(['diff', '--config', 'app/localness.config.json'], platform({}))
+    expect(err.join('')).toMatch(/is for CLI 0\.0\.1.*--root app/)
+  })
+})
+
+describe('skillDirsFor', () => {
+  it('picks the fewest folders the agents read', () => {
+    expect(skillDirsFor(['copilot', 'claude', 'cursor'])).toEqual([
+      '.claude/skills',
+    ])
+    expect(skillDirsFor(['copilot'])).toEqual(['.github/skills'])
+    expect(skillDirsFor(['copilot', 'cursor'])).toEqual(['.agents/skills'])
+    expect(skillDirsFor(['claude', 'codex']).sort()).toEqual([
+      '.agents/skills',
+      '.claude/skills',
+    ])
   })
 })
 

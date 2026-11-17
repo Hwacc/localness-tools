@@ -8,8 +8,11 @@ import { runInit } from './init'
 import { runPull } from './pull'
 import { runPush } from './push'
 import { EXIT_ERROR, OPTIONS, type CliIo } from './shared'
+import { runSkill, warnOutdatedSkill } from './skill'
 import { runSuggestName } from './suggest-name'
 import { runSync } from './sync'
+
+const SYNC_COMMANDS = new Set(['diff', 'pull', 'push', 'apply', 'sync'])
 
 const HELP = `localness ${version}: sync locale JSON files with a Localness project
 
@@ -23,6 +26,8 @@ Commands:
   apply <id>           Write a plan to the project (no id: list plans)
   sync                 pull the project's changes, then plan a push of local ones
   suggest-name <text>  Ask the project's AI for a key name; writes nothing
+  skill install        Install the Agent Skill that teaches coding agents
+                       this workflow, at the repository root
 
 Options:
   --config <path>      Config file (default: nearest localness.config.json)
@@ -30,14 +35,20 @@ Options:
                        when both changed
   --locales <en,ja>    Only these platform locales
   --prune              Also remove keys the project does not have (pull)
-  --dry-run            Show what would happen (init, pull, push, sync)
+  --dry-run            Show what would happen (init, pull, push, sync, skill)
   --json               Machine-readable output
   --base-url <url>     Localness instance URL (init)
   --project <name|id>  Project (init; default: the token's only project)
   --dir <path>         Locale directory, skipping detection (init)
   --pattern <pattern>  File pattern under --dir, e.g. {locale}.json (init)
   --format <format>    flat-json or nested-json (init)
-  --force              Overwrite an existing config (init)
+  --force              Overwrite an existing config (init) or a hand-edited
+                       Skill (skill install)
+  --agent <a,b>        Agents the Skill is for: copilot, claude, cursor, codex
+                       or all (default: copilot,claude,cursor)
+  --agents-md          Also point AGENTS.md at the Skill (skill install)
+  --root <path>        Folder the agents open, when it is not the git root
+                       (skill install)
   -h, --help           Show this help
   -v, --version        Show the version
 
@@ -85,9 +96,12 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
     if (command === 'suggest-name') {
       return await runSuggestName(io, values, rest.join(' '))
     }
-    const allowed = command === 'apply' ? 1 : 0
+    const allowed = command === 'apply' || command === 'skill' ? 1 : 0
     if (rest.length > allowed) {
       throw new Error(`Unexpected argument: ${rest[allowed]}`)
+    }
+    if (SYNC_COMMANDS.has(command)) {
+      await warnOutdatedSkill(io, values).catch(() => {})
     }
     switch (command) {
       case 'init':
@@ -102,6 +116,8 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
         return await runApply(io, values, rest[0])
       case 'sync':
         return await runSync(io, values)
+      case 'skill':
+        return await runSkill(io, values, rest[0])
       default:
         throw new Error(`Unknown command: ${command}. Run "localness --help".`)
     }

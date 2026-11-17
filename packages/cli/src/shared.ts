@@ -30,6 +30,9 @@ export const OPTIONS = {
   pattern: { type: 'string' },
   format: { type: 'string' },
   force: { type: 'boolean' },
+  agent: { type: 'string' },
+  'agents-md': { type: 'boolean' },
+  root: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean', short: 'v' },
 } as const
