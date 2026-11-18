@@ -31,5 +31,6 @@
   "settings.theme.dark": "Dark mode",
   "welcome": "Welcome",
   "home.hero.title": "Build once, ship everywhere",
-  "ok": "OK"
+  "ok": "OK",
+  "my_new_key": "My new key"
 }
