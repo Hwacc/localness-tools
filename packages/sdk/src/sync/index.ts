@@ -6,6 +6,8 @@ export {
   localnessConfigSchema,
   parseConfig,
   requireFiles,
+  withConfigFields,
+  writeConfigFields,
 } from './config'
 export type {
   LoadedConfig,
@@ -14,6 +16,8 @@ export type {
   LocalnessFilesConfig,
   SyncContent,
 } from './config'
+export { resolveRelease } from './release'
+export type { ReleaseRef } from './release'
 export { readLocalFiles } from './local'
 export type { LocalLocaleFile } from './local'
 export { fetchPlatformTexts, platformTextOf } from './platform'
@@ -32,6 +36,7 @@ export {
   SYNC_PULL_KINDS,
   applyPull,
   planPull,
+  pullLocaleFiles,
   recordPull,
 } from './pull'
 export type { PullFile, PullOptions } from './pull'

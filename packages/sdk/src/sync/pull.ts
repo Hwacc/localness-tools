@@ -5,8 +5,9 @@ import {
   writeLocaleFile,
   type LocaleFileFormat,
 } from '@localness/contract/locale-file'
+import { requireFiles, type LoadedConfig } from './config'
 import type { Comparison, DiffKind } from './diff'
-import type { BaseTexts } from './state'
+import { writeBase, type BaseTexts } from './state'
 
 /** What `pull` writes: the project's changes, and `different` when there is no base to judge. */
 export const PULL_KINDS: readonly DiffKind[] = [
@@ -101,6 +102,27 @@ export async function applyPull(files: readonly PullFile[]) {
     await mkdir(dirname(file.path), { recursive: true })
     await writeFile(file.path, file.output, 'utf8')
   }
+}
+
+/**
+ * `planPull`, then, unless `dryRun`, writes the files and records the base:
+ * what `localness pull` does, and the editor after it changes one key.
+ */
+export async function pullLocaleFiles(
+  loaded: LoadedConfig,
+  comparison: Comparison,
+  options: Omit<PullOptions, 'format'> & { dryRun?: boolean },
+) {
+  const files = planPull(comparison, {
+    format: requireFiles(loaded).format,
+    kinds: options.kinds,
+    prune: options.prune,
+  })
+  if (!options.dryRun) {
+    await applyPull(files)
+    await writeBase(loaded, recordPull(comparison, files))
+  }
+  return files
 }
 
 /**

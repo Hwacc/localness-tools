@@ -13,6 +13,7 @@ import {
   parseConfig,
   PULL_KINDS,
   PUSH_KINDS,
+  applyPush,
   checkPlan,
   listPlans,
   planPull,
@@ -20,8 +21,11 @@ import {
   prunePlans,
   readBase,
   recordPull,
+  resolveRelease,
   savePlan,
+  withConfigFields,
   writeBase,
+  writeConfigFields,
   type LocalnessConfigInput,
 } from '../src/sync'
 import { BASE_URL, TOKEN, mockFetch } from './helpers'
@@ -319,6 +323,75 @@ describe('locale file sync', () => {
     const comparison = await compareLocaleFiles(loaded, client, { keys: ['a'] })
     expect(comparison.entries.map((entry) => entry.key)).toEqual(['a'])
     expect(calls.at(-1)!.url.searchParams.get('keys')).toBe('a')
+  })
+
+  it('labels created keys with the config release', async () => {
+    const loaded = await setup({ release: 'V2' })
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ c: 'C' }),
+    )
+    const { fetch, calls } = mockFetch((call) => {
+      if (call.url.pathname.endsWith('/meta')) {
+        return {
+          body: {
+            project: { id: 1, name: 'Web' },
+            locales: ['en'],
+            sourceLocale: 'en',
+            localeFallback: 'en',
+            release: null,
+            releases: [{ id: '7', name: 'v2', sort: 1 }],
+            coverage: { keys: 0, projectKeys: 0, publishedPerLocale: {} },
+            canManageReleases: false,
+            generatedAt: 'now',
+          },
+        }
+      }
+      if (call.method === 'POST') {
+        return { body: { sourceLocale: 'en', created: true, key: {} } }
+      }
+      return {
+        body: {
+          sourceLocale: 'en',
+          keys: [],
+          total: 0,
+          offset: 0,
+          limit: 1000,
+          generatedAt: 'now',
+        },
+      }
+    })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const release = await resolveRelease(loaded, client)
+    expect(release).toEqual({ id: 7, name: 'v2' })
+    const plan = planPush(
+      loaded,
+      { ...(await compareLocaleFiles(loaded, client)) },
+      { kinds: PUSH_KINDS, release },
+    )
+    await applyPush(client, plan, await checkPlan(client, plan))
+    expect(calls.find((call) => call.method === 'POST')!.body).toEqual({
+      key: 'c',
+      sourceText: 'C',
+      releaseId: 7,
+    })
+
+    const unknown = await setup({ release: 'v9' })
+    await expect(resolveRelease(unknown, client)).rejects.toThrow(
+      /no release "v9"/,
+    )
+  })
+
+  it('rewrites config fields, dropping undefined ones', async () => {
+    expect(
+      withConfigFields('{"baseUrl":"x","release":"v1","a":1}', {
+        release: undefined,
+        project: 'web',
+      }),
+    ).toBe('{\n  "baseUrl": "x",\n  "a": 1,\n  "project": "web"\n}\n')
+    const path = join(root, CONFIG_FILE_NAME)
+    await writeConfigFields(path, { release: 'v2' })
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ release: 'v2' })
   })
 
   it('rejects a locale the project lacks', async () => {

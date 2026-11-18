@@ -1,10 +1,11 @@
-export { createClient, draftConflictOf } from './client'
+export { createClient, draftConflictOf, findRelease } from './client'
 export type {
   ClientOptions,
   CreateKeyInput,
   KeyStatesOptions,
   KeyStatesResult,
   LocalnessClient,
+  ReleaseMembershipInput,
   Scope,
   SearchKeysOptions,
   UpdateKeyInput,

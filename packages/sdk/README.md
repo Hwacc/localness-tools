@@ -56,7 +56,12 @@ Writes need a Read & write token. Translations and unnamed keys land in drafts; 
 
 ```ts
 // A named key publishes its source text; without `key` you get an unnamed draft.
-await client.createKey({ key: 'app.welcome', sourceText: 'Welcome' })
+// `releaseId` labels the created key; a reused unnamed key keeps its labels.
+await client.createKey({
+  key: 'app.welcome',
+  sourceText: 'Welcome',
+  releaseId: 3,
+})
 
 // `expected` is the draft you read (`draftText ?? ''`); a mismatch throws `conflict`.
 const { key } = await client.updateKey({
@@ -66,6 +71,16 @@ const { key } = await client.updateKey({
 
 // Spends AI quota.
 const suggestion = await client.suggestKeyName('Welcome back')
+
+// Owners only; a taken name is a `conflict`.
+const release = await client.createRelease('v2.4')
+// Set semantics: adding a label a key has, or removing one it lacks, is a no-op.
+await client.setReleaseMembership({
+  releaseId: release.id,
+  keyIds: [1, 2],
+  mode: 'add',
+})
+findRelease(meta.releases, 'V2.4') // case-insensitive lookup by name
 ```
 
 When a draft changed since it was read, `draftConflictOf(error)` returns the locales that differ and the key's current state; nothing was written. A taken key name is a `conflict` with no draft data.
@@ -199,7 +214,7 @@ if (!check.expired && check.stale.length === 0) {
 | `conflict`         | Both sides changed, or the file would overwrite someone else's draft.   |
 | `pending-publish`  | The file matches the project's unpublished draft.                       |
 
-`PULL_KINDS` / `SYNC_PULL_KINDS` / `FORCED_PULL_KINDS` and `PUSH_KINDS` / `FORCED_PUSH_KINDS` are the kind sets the CLI uses. Push plans live in `.localness/plans/`, expire after an hour, hold at most 200 keys and are bound to the base URL, project and `content`. `prunePlans` deletes expired ones (the CLI runs it on `push`, `sync` and `apply` without an id). `applyPush` creates new keys, then updates drafts with the draft text read by `checkPlan` as `expected`, and stops at the first error. `diffLocaleTexts`, `fetchPlatformTexts`, `readLocalFiles` and `parseConfig` are exported for other flows. Keys of unnamed drafts are skipped; `content: "draft"` compares draft text instead of published text.
+`PULL_KINDS` / `SYNC_PULL_KINDS` / `FORCED_PULL_KINDS` and `PUSH_KINDS` / `FORCED_PUSH_KINDS` are the kind sets the CLI uses. Push plans live in `.localness/plans/`, expire after an hour, hold at most 200 keys and are bound to the base URL, project and `content`. `prunePlans` deletes expired ones (the CLI runs it on `push`, `sync` and `apply` without an id). `applyPush` creates new keys, then updates drafts with the draft text read by `checkPlan` as `expected`, and stops at the first error. `diffLocaleTexts`, `fetchPlatformTexts`, `readLocalFiles` and `parseConfig` are exported for other flows. The config's `release` labels the keys a push creates: `resolveRelease(loaded, client)` turns it into `{ id, name }` (null when unset, an error when the project lacks it), passed as `planPush(…, { release })`. `writeConfigFields(path, fields)` rewrites config fields in place, keeping the others and their order; an `undefined` value removes the field. Keys of unnamed drafts are skipped; `content: "draft"` compares draft text instead of published text.
 
 ## Testing
 

@@ -12,6 +12,8 @@ import {
   keyDraftConflictSchema,
   keyNameSuggestionSchema,
   keyWriteResultSchema,
+  projectReleaseSchema,
+  releaseMembershipResultSchema,
   type CaptureKeySearch,
   type CaptureMatch,
   type DeliveryBundle,
@@ -24,6 +26,8 @@ import {
   type KeyDraftConflict,
   type KeyNameSuggestion,
   type KeyWriteResult,
+  type ProjectRelease,
+  type ReleaseMembershipResult,
 } from './schemas'
 
 export const DEFAULT_KEY_STATES_PAGE_SIZE = 1000
@@ -79,6 +83,26 @@ export interface CreateKeyInput {
   /** Omit to get the text's `__unnamed_` placeholder, a draft named later. A named key publishes its source text. */
   key?: string
   sourceText: string
+  /** Labels the key with this release when the call creates it; a reused `__unnamed_` key keeps its labels. */
+  releaseId?: number
+}
+
+export interface ReleaseMembershipInput {
+  releaseId: number
+  /** Key ids, as in `DeliveryKeyState.id`. */
+  keyIds: readonly number[]
+  mode: 'add' | 'remove'
+}
+
+/** The release named `name` (case-insensitive, like the platform's uniqueness rule). */
+export function findRelease(
+  releases: readonly ProjectRelease[],
+  name: string,
+): ProjectRelease | undefined {
+  const wanted = name.trim().toLowerCase()
+  return releases.find(
+    (release) => release.name.trim().toLowerCase() === wanted,
+  )
 }
 
 export interface UpdateKeyInput {
@@ -113,6 +137,13 @@ export interface LocalnessClient {
   createKey(input: CreateKeyInput, scope?: WriteScope): Promise<KeyWriteResult>
   /** Write token. Edits drafts only; a stale `expected` is a `conflict`, see `draftConflictOf`. */
   updateKey(input: UpdateKeyInput, scope?: WriteScope): Promise<KeyWriteResult>
+  /** Write token, project owner only. A taken name is a `conflict`. */
+  createRelease(name: string, scope?: WriteScope): Promise<ProjectRelease>
+  /** Write token. Set semantics: adding a label a key has changes nothing. */
+  setReleaseMembership(
+    input: ReleaseMembershipInput,
+    scope?: WriteScope,
+  ): Promise<ReleaseMembershipResult>
   /** Write token; spends the project's AI quota and writes nothing. */
   suggestKeyName(
     sourceText: string,
@@ -196,6 +227,22 @@ export function createClient(options: ClientOptions): LocalnessClient {
       send('POST', '/keys', writeQuery(scope), input, keyWriteResultSchema),
     updateKey: (input, scope) =>
       send('PATCH', '/keys', writeQuery(scope), input, keyWriteResultSchema),
+    createRelease: (name, scope) =>
+      send(
+        'POST',
+        '/releases',
+        writeQuery(scope),
+        { name },
+        projectReleaseSchema,
+      ),
+    setReleaseMembership: ({ releaseId, keyIds, mode }, scope) =>
+      send(
+        'POST',
+        '/release-membership',
+        writeQuery(scope),
+        { releaseId, kind: 'key', ids: keyIds, mode },
+        releaseMembershipResultSchema,
+      ),
     suggestKeyName: (sourceText, scope) =>
       send(
         'POST',

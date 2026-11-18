@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import {
   DEFAULT_LOCALE_FILE_PATTERN,
@@ -43,6 +43,8 @@ export const localnessConfigSchema = z.object({
   /** Platform locale → file name, when `zh_cn` → `zh-CN` is not the name. */
   localeMap: z.record(z.string(), z.string().min(1)).optional(),
   content: z.enum(SYNC_CONTENTS).default('published'),
+  /** Release name new keys are labelled with. Existing keys keep their labels. */
+  release: z.string().trim().min(1).optional(),
   /** Extra regular expressions finding keys in code; the key is capture group 1. */
   keyPatterns: z.array(z.string()).default([]),
   useDefaultKeyPatterns: z.boolean().default(true),
@@ -104,6 +106,33 @@ export async function loadConfig(path: string): Promise<LoadedConfig> {
     root: dirname(absolute),
     config: parseConfig(source, absolute),
   }
+}
+
+/**
+ * The config text with `fields` set; an undefined field is removed. Other
+ * fields and their order are kept; a missing file starts empty.
+ */
+export function withConfigFields(
+  source: string | undefined,
+  fields: Record<string, unknown>,
+): string {
+  const config: unknown = source === undefined ? {} : JSON.parse(source)
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    throw new Error(`${CONFIG_FILE_NAME} must contain a JSON object.`)
+  }
+  return `${JSON.stringify({ ...config, ...fields }, null, 2)}\n`
+}
+
+export async function writeConfigFields(
+  path: string,
+  fields: Record<string, unknown>,
+) {
+  const source = await readFile(path, 'utf8').catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  })
+  const next = withConfigFields(source, fields)
+  if (next !== source) await writeFile(path, next, 'utf8')
 }
 
 export function requireFiles(loaded: LoadedConfig): LocalnessFilesConfig {

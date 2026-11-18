@@ -12,6 +12,8 @@ export {
   keyDraftConflictSchema,
   keyNameSuggestionSchema,
   keyWriteResultSchema,
+  projectReleaseSchema,
+  releaseMembershipResultSchema,
 } from '@localness/contract'
 export type {
   CaptureKeyHit,
@@ -30,4 +32,5 @@ export type {
   KeyNameSuggestion,
   KeyWriteResult,
   ProjectRelease,
+  ReleaseMembershipResult,
 } from '@localness/contract'

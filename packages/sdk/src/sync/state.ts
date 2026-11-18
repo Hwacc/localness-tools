@@ -51,6 +51,11 @@ export const pushPlanSchema = originSchema.extend({
   createdAt: z.string(),
   expiresAt: z.string(),
   sourceLocale: z.string(),
+  /** The release created keys are labelled with. */
+  release: z
+    .object({ id: z.number(), name: z.string() })
+    .nullable()
+    .default(null),
   keys: z.array(pushKeySchema),
   blocked: z.array(
     z.object({

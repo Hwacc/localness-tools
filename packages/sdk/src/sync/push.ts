@@ -6,6 +6,7 @@ import type { DeliveryKeyState } from '../schemas'
 import type { LoadedConfig } from './config'
 import type { Comparison, DiffEntry, DiffKind } from './diff'
 import { platformTextOf } from './platform'
+import type { ReleaseRef } from './release'
 import {
   MAX_PLAN_KEYS,
   PLAN_TTL_MS,
@@ -30,6 +31,8 @@ export const FORCED_PUSH_KINDS: readonly DiffKind[] = [
 
 export interface PlanPushOptions {
   kinds: readonly DiffKind[]
+  /** Labels the keys the plan creates; see `resolveRelease`. */
+  release?: ReleaseRef | null
   now?: Date
 }
 
@@ -91,6 +94,7 @@ export function planPush(
     expiresAt: new Date(now.getTime() + PLAN_TTL_MS).toISOString(),
     ...originOf(loaded),
     sourceLocale: source,
+    release: options.release ?? null,
     keys: [...keys.values()],
     blocked,
   }
@@ -166,6 +170,7 @@ export async function applyPush(
         await client.createKey({
           key: item.key,
           sourceText: item.create.sourceText,
+          releaseId: plan.release?.id,
         })
       }
       if (locales.length > 0) {

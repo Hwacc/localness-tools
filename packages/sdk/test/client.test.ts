@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { LocalnessError, createClient, draftConflictOf } from '../src'
+import {
+  LocalnessError,
+  createClient,
+  draftConflictOf,
+  findRelease,
+} from '../src'
 import { BASE_URL, TOKEN, mockFetch } from './helpers'
 
 function stateKey(id: number) {
@@ -250,6 +255,36 @@ describe('key writes', () => {
       .catch((e: unknown) => e)
     expect(error).toMatchObject({ code: 'conflict' })
     expect(draftConflictOf(error)).toBeUndefined()
+  })
+})
+
+describe('releases', () => {
+  it('labels keys through release-membership', async () => {
+    const { fetch, calls } = mockFetch({ body: { ok: true, changed: 2 } })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    await expect(
+      client.setReleaseMembership({
+        releaseId: 3,
+        keyIds: [1, 2],
+        mode: 'add',
+      }),
+    ).resolves.toEqual({ ok: true, changed: 2 })
+    expect(calls[0]!.url.pathname).toBe('/api/v1/release-membership')
+    expect(calls[0]!.body).toEqual({
+      releaseId: 3,
+      kind: 'key',
+      ids: [1, 2],
+      mode: 'add',
+    })
+  })
+
+  it('finds a release by name regardless of case', () => {
+    const releases = [
+      { id: 1, name: 'v1.0', sort: 1 },
+      { id: 2, name: 'V2', sort: 2 },
+    ]
+    expect(findRelease(releases, ' v2 ')?.id).toBe(2)
+    expect(findRelease(releases, 'v3')).toBeUndefined()
   })
 })
 
