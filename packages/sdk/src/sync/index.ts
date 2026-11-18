@@ -45,6 +45,7 @@ export {
   PUSH_KINDS,
   applyPush,
   checkPlan,
+  describeBlocked,
   planPush,
   recordPush,
 } from './push'

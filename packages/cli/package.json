@@ -27,7 +27,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@localness/contract": "^0.4.3",
+    "@localness/contract": "^0.5.0",
     "@localness/sdk": "workspace:*"
   }
 }

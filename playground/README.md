@@ -26,12 +26,39 @@ Or open `packages/vscode` in the editor and press **F5** with "Run Extension on 
 
 | File           | Change                                          | `diff` shows (no base yet)   |
 | -------------- | ----------------------------------------------- | ---------------------------- |
-| `en.json`      | `welcome` reworded, `ok` removed, `home.hero.title` added | `different`, `platform-added`, `local-added` |
+| `en.json`      | `welcome` reworded, `ok` removed, `home.hero.title` and five `checkout*` keys added | `different`, `platform-added`, `local-added` |
 | `zh-CN.json`   | `cart` reworded, `home.hero.title` added        | `different`, `local-added`   |
 | `ja.json`      | `cancel` removed, `settings.profile.nickname` filled | `platform-added`, `local-added` |
 | `de.json`      | none                                            | nothing                      |
 
 The table holds while the project still has the seed text; edits made on the platform since then change what `diff` shows. `localness pull --dry-run` and `localness push --dry-run` list what would be written. `pull` and `sync` write the files and create `.localness/` (gitignored); restore with `git checkout src/locales` and delete `.localness/` afterwards. `localness apply <id>` writes drafts to the real project and needs a Read & write token.
+
+## Extraction and key names
+
+`src/extract/` holds components with hardcoded text for the agent to extract (`localness skill install --root .`, then ask the agent to extract text in `src/extract/`). Expected outcome against the seed:
+
+| Text | Expected |
+| --- | --- |
+| `Cancel`, `Forgot password?`, `Nickname`, `Delete my account` (split over two lines) | reuse the single matching key |
+| `Sign in` | several keys match; the agent picks one or asks |
+| Spring sale banner | partial match of `cart.promo.banner`; review before reusing |
+| `Order summary`, `Coupon`, `Place order`, `Display name`, `Profile updated.` and the rest | new keys following the project convention |
+| `console` text, `className`, `data-testid`, URLs, track event names, existing `t()` calls | left alone |
+
+`localness match --json "Sign in"` prints `matches`, the project `convention` and declared `namespaces`. Keys only in `en.json` count too, marked `local`: `localness match "Place order"` finds `checkout_place_order` before it is pushed. `Shipping address` finds `checkout_ShippingAddress`, which breaks the convention, so the agent should flag it.
+
+The five `checkout*` keys in `en.json` exercise name validation for new keys. `localness push --dry-run` creates `checkout_place_order` and blocks the others (with `_` separator, snake_case, depth 4):
+
+| Key | Reason |
+| --- | --- |
+| `checkout.apply_coupon` | `charset`, `case` |
+| `checkout_ShippingAddress` | `case` |
+| `checkout__close` | `segment` |
+| `checkout_summary_free_shipping_note` | `depth` |
+
+The VS Code Sync view lists the same blocked keys in the push confirmation. Existing keys are never checked, so the seed's `.` keys pass.
+
+To test a key prefix, set one in the platform project settings (e.g. `web`) and declare namespaces (`auth`, `cart`, `settings`, `checkout`), then **Localness: Refresh**. Namespaces are relative to the prefix, so unprefixed seed keys stay ungrouped, and every new key without `web_` is blocked with `prefix`.
 
 ## Seed contents
 

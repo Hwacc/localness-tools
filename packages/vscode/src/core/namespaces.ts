@@ -1,22 +1,10 @@
-const BOUNDARY = new Set(['_', '.', '-', ':', '/'])
+import {
+  NAMESPACE_BOUNDARY,
+  namespaceOf,
+  stripProjectPrefix,
+} from '@localness/sdk'
 
-/** Same rule as the platform: longest name followed by a boundary character wins. */
-export function namespaceOf(
-  key: string,
-  names: readonly string[],
-): string | null {
-  let best: string | null = null
-  for (const name of names) {
-    if (
-      !name ||
-      !key.startsWith(name) ||
-      !BOUNDARY.has(key.charAt(name.length))
-    )
-      continue
-    if (!best || name.length > best.length) best = name
-  }
-  return best
-}
+const BOUNDARY = new Set<string>(NAMESPACE_BOUNDARY)
 
 export function firstSegment(key: string): string {
   const index = [...key].findIndex((char) => BOUNDARY.has(char))
@@ -30,22 +18,25 @@ export interface KeyGroup<T> {
 }
 
 /**
- * Declared namespaces come in the platform's display order. Without any, keys
- * group by their first segment; a key with no boundary stays ungrouped.
+ * Declared namespaces come in the platform's display order and, like the
+ * platform's, are relative to the project's key prefix. Without any, keys group
+ * by their first segment after the prefix; a key with no boundary stays ungrouped.
  */
 export function groupByNamespace<T extends { key: string }>(
   items: readonly T[],
   names: readonly string[],
+  keyPrefix: string,
 ): KeyGroup<T>[] {
   const declared = names.length > 0
   const groups = new Map<string | null, T[]>()
   for (const item of items) {
     let name: string | null
     if (declared) {
-      name = namespaceOf(item.key, names)
+      name = namespaceOf(item.key, names, keyPrefix)
     } else {
-      const segment = firstSegment(item.key)
-      name = segment && segment !== item.key ? segment : null
+      const path = stripProjectPrefix(item.key, keyPrefix)
+      const segment = firstSegment(path)
+      name = segment && segment !== path ? segment : null
     }
     const list = groups.get(name)
     if (list) list.push(item)

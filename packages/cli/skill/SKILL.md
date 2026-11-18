@@ -1,12 +1,12 @@
 ---
 name: localness
-description: Sync this repository's locale JSON files with its Localness translation project through the `localness` CLI. Use when adding, changing, renaming or removing translatable strings or locale keys, when touching files under the locale directory named in localness.config.json, or when locale files and the Localness project disagree.
+description: Sync this repository's locale JSON files with its Localness translation project through the `localness` CLI. Use when adding, changing, renaming or removing translatable strings or locale keys, when extracting hardcoded text into locale keys, when touching files under the locale directory named in localness.config.json, or when locale files and the Localness project disagree.
 metadata:
   localness-cli: '{{version}}'
   localness-hash: ''
 ---
 
-# Localness locale sync
+# Localness
 
 The locale JSON files in this repository are synced with a Localness project. The `localness` CLI is the only way to move text between them; if it is not on PATH, run `npx @localness/cli` instead. Each command uses the nearest `localness.config.json` above the working directory, so run it from the package that owns the config. That file names the locale directory, its layout and the project.
 
@@ -20,55 +20,19 @@ The locale JSON files in this repository are synced with a Localness project. Th
 - Never read, print, ask for or write `LOCALNESS_TOKEN`. Never edit or commit `.localness/`.
 - `apply` writes drafts. Publishing happens in the Localness web app, so never say the text is live.
 
-## Workflow
+## Tasks
 
-1. Run `localness diff --json`. Exit code 0: nothing differs. 1: differences. 2: error.
-2. Sort each difference by `kind` (table below) and list everything that needs a person.
-3. Ask the person about those keys and wait for the answer.
-4. Bring the project's text in: `localness pull`, or `localness pull --keys <a,b>` for keys the person gave to the project.
-5. Plan local changes: `localness push --json`, or `localness push --keys <a,b> --json` for keys the person gave to the local side. It writes nothing to the project.
-6. Show the plan to the person: its id, and for each key whether it is created or updated and every locale's old → new text. Also show `blocked` and `leftOut`.
-7. Only after the person approves, run `localness apply <id>`. If it reports the plan stale or expired, nothing was written: run `diff` again and start over; never retry the same id.
-8. Report what was written, and that drafts wait for a publish in the web app.
+Read the reference for the task before running anything:
 
-`localness sync` does steps 4 and 5 together for the unambiguous kinds. `--dry-run` previews `pull`, `push` and `sync`.
-
-| `kind`             | Meaning                                                       | Action                                                                                 |
-| ------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `platform-added`   | The project has text the file lacks                           | `pull`                                                                                 |
-| `platform-changed` | The project changed it; the file did not                      | `pull`                                                                                 |
-| `local-added`      | The file has text the project lacks                           | `push`                                                                                 |
-| `local-changed`    | The file changed it; the project did not                      | `push`                                                                                 |
-| `pending-publish`  | The file matches an unpublished draft                         | Nothing; it gets published in the web app                                              |
-| `conflict`         | Both sides changed, or a push would overwrite someone's draft | Ask; then `pull --keys` or `push --keys`                                               |
-| `different`        | The texts differ and there is no base yet                     | Ask; then `pull --keys` or `push --keys`                                               |
-| `platform-deleted` | The key left the project; the file still has it               | Ask; remove it from the file, or `pull --prune` when the person wants all of them gone |
-| `local-deleted`    | The file dropped a key the project still has                  | Ask; the CLI never deletes project keys, a person does that in the web app             |
-
-When `hasBase` is false (the first sync), every changed text is `different`. Say so before pulling: a plain `pull` takes the project's text for all of them.
-
-## New keys
-
-- Follow the naming of the neighbouring keys in the same file. When unsure, run `localness suggest-name "<source text>"`; it uses the project's AI quota and needs a read & write token, so ask before running it for many strings. Names starting with `__unnamed_` are reserved.
-- A new key needs its text in the source-locale file. `apply` creates the key and publishes that source text; text in other locales becomes drafts.
-- A plan holds at most 200 keys and expires after an hour.
-
-## Releases
-
-Releases are labels on keys in the project; they never filter what is synced. `release` in `localness.config.json` labels the keys `apply` creates, and the plan's `release` says which one. Existing keys keep their labels.
-
-- Never change the config's release, create a release or relabel keys unless a person asked. `localness releases` lists them and marks the current one.
-- `localness releases use <name>` (or `--none`) picks the release for new keys; `releases create <name> --use` creates one and needs a project owner's token.
-- `localness releases add <release> <key...>` and `releases remove …` relabel existing keys and need a read & write token. With `--match <glob>`, first run it without `--yes` and `--json` to list the matched keys, show them to the person, and pass `--yes` only after they approve.
+| Task                                                                          | Read                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Locale files and the project disagree; adding or changing keys and their text | [references/sync.md](references/sync.md)               |
+| Moving hardcoded user-facing text in code into locale keys                    | [references/extract.md](references/extract.md)         |
+| Release labels on keys, or the release new keys get                           | [references/releases.md](references/releases.md)       |
+| Reading a command's `--json` output                                           | [references/json-shapes.md](references/json-shapes.md) |
 
 ## Problems
 
 - `Authentication failed`: the token is missing or invalid. Tell the person; they set `LOCALNESS_TOKEN` in `.env.local` next to the config.
 - `The token may not do this`: the token is read only. Tell the person; never look for another token.
 - No `localness.config.json`: ask the person before running `localness init`.
-
-## JSON shapes
-
-- `diff --json`: `{ sourceLocale, locales, content, hasBase, files, differences: [{ locale, key, kind, local, platform, draft, base, onPlatform }] }`
-- `push --json`: `{ id, path, expiresAt, sourceLocale, release, keys: [{ key, create, locales: { <locale>: { text, platform, draft } } }], blocked, leftOut }`; `id` is null when there is nothing to push; `release` is the name new keys get, or null.
-- `apply <id> --json`: `{ id, written: [{ key, created, locales }], failed }`

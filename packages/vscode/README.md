@@ -92,7 +92,7 @@ Custom pattern example in `localness.config.json` (a `tr("key")` helper):
 
 ## Namespaces
 
-The Keys view groups keys by the namespaces the project declares (from `/api/v1/meta`). A key belongs to the namespace whose name it starts with, followed by one of `_ . - : /`. Without declared namespaces keys group by their first segment.
+The Keys view groups keys by the namespaces the project declares (from `/api/v1/meta`). Names are relative to the project's key prefix: a key belongs to the namespace that what follows its prefix starts with, followed by one of `_ . - : /` (a key without the prefix is matched whole). Without declared namespaces keys group by their first segment after the prefix.
 
 ## Development
 

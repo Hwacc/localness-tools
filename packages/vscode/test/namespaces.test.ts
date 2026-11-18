@@ -1,43 +1,34 @@
 import { describe, expect, it } from 'vitest'
-import {
-  firstSegment,
-  groupByNamespace,
-  namespaceOf,
-} from '../src/core/namespaces'
+import { firstSegment, groupByNamespace } from '../src/core/namespaces'
 import { isValidBaseUrl, keyUrl, trimBaseUrl } from '../src/core/urls'
-
-describe('namespaceOf', () => {
-  const names = ['app', 'app_admin', 'common']
-
-  it('needs a boundary after the name', () => {
-    expect(namespaceOf('app.title', names)).toBe('app')
-    expect(namespaceOf('app_title', names)).toBe('app')
-    expect(namespaceOf('app:title', names)).toBe('app')
-    expect(namespaceOf('app/title', names)).toBe('app')
-    expect(namespaceOf('app-title', names)).toBe('app')
-    expect(namespaceOf('apple.title', names)).toBeNull()
-    expect(namespaceOf('app', names)).toBeNull()
-  })
-
-  it('prefers the longest name and is case-sensitive', () => {
-    expect(namespaceOf('app_admin.title', names)).toBe('app_admin')
-    expect(namespaceOf('App.title', names)).toBeNull()
-  })
-})
 
 describe('groupByNamespace', () => {
   const items = ['b.two', 'a.one', 'b.one', 'plain'].map((key) => ({ key }))
 
   it('uses declared namespaces in declared order and ungrouped last', () => {
-    const groups = groupByNamespace(items, ['b', 'a', 'unused'])
+    const groups = groupByNamespace(items, ['b', 'a', 'unused'], '')
     expect(groups.map((group) => group.name)).toEqual(['b', 'a', null])
     expect(groups[0]?.items.map((item) => item.key)).toEqual(['b.one', 'b.two'])
   })
 
   it('falls back to the first segment when none are declared', () => {
-    const groups = groupByNamespace(items, [])
+    const groups = groupByNamespace(items, [], '')
     expect(groups.map((group) => group.name)).toEqual(['a', 'b', null])
     expect(groups[2]?.items.map((item) => item.key)).toEqual(['plain'])
+  })
+
+  it('matches names after the project prefix', () => {
+    const keys = ['web.home.title', 'web.cart_total', 'home.legacy', 'web.x']
+    const items = keys.map((key) => ({ key }))
+    const declared = groupByNamespace(items, ['home', 'cart'], 'web')
+    expect(declared.map((group) => group.name)).toEqual(['home', 'cart', null])
+    expect(declared[0]?.items.map((item) => item.key)).toEqual([
+      'home.legacy',
+      'web.home.title',
+    ])
+    const segments = groupByNamespace(items, [], 'web')
+    expect(segments.map((group) => group.name)).toEqual(['cart', 'home', null])
+    expect(segments[2]?.items.map((item) => item.key)).toEqual(['web.x'])
   })
 })
 

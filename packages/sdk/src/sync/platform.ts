@@ -1,7 +1,7 @@
 import { normalizeLocaleText } from '@localness/contract/locale-file'
 import { isUnnamedKey } from '@localness/contract/rules'
 import type { LocalnessClient } from '../client'
-import type { DeliveryKeyState } from '../schemas'
+import type { DeliveryKeyConvention, DeliveryKeyState } from '../schemas'
 import type { SyncContent } from './config'
 
 export interface PlatformTexts {
@@ -15,6 +15,8 @@ export interface PlatformTexts {
   texts: Record<string, Record<string, string | null>>
   /** Same shape: the editor's working text, unpublished edits included. */
   drafts: Record<string, Record<string, string | null>>
+  /** The rules new key names follow; absent from servers before it. */
+  keyConvention?: DeliveryKeyConvention | null
 }
 
 type LocaleState = DeliveryKeyState['locales'][string] | undefined
@@ -75,5 +77,11 @@ export async function fetchPlatformTexts(
       drafts[locale]![key.key] = normalizeLocaleText(state?.draftText)
     }
   }
-  return { sourceLocale: result.sourceLocale, locales, texts, drafts }
+  return {
+    sourceLocale: result.sourceLocale,
+    locales,
+    texts,
+    drafts,
+    keyConvention: meta.keyConvention ?? null,
+  }
 }

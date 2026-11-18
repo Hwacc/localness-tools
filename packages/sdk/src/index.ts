@@ -26,3 +26,8 @@ export type {
   RefreshResult,
 } from './cache'
 export * from './schemas'
+export {
+  NAMESPACE_BOUNDARY,
+  namespaceOf,
+  stripProjectPrefix,
+} from '@localness/contract/rules'

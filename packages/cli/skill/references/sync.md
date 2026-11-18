@@ -1,26 +1,4 @@
----
-name: localness
-description: Sync this repository's locale JSON files with its Localness translation project through the `localness` CLI. Use when adding, changing, renaming or removing translatable strings or locale keys, when touching files under the locale directory named in localness.config.json, or when locale files and the Localness project disagree.
-metadata:
-  localness-cli: '0.1.0'
-  localness-hash: '24eee457fa095453'
----
-
-# Localness locale sync
-
-The locale JSON files in this repository are synced with a Localness project. The `localness` CLI is the only way to move text between them; if it is not on PATH, run `npx @localness/cli` instead. Each command uses the nearest `localness.config.json` above the working directory, so run it from the package that owns the config. That file names the locale directory, its layout and the project.
-
-## Rules
-
-- Write to the project only with `localness apply <id>`, and only after a person approved that plan in this conversation. Never write through the HTTP API, an MCP server or the web app.
-- Never copy text between the locale files and the project by hand: `pull` brings the project's text in, `push` plans sending yours.
-- Never decide a `conflict` or `different` key yourself. Show each side's text and let a person choose.
-- Never pass `--prune` unless a person asked to delete those keys from the files.
-- Edit locale files only for what the task asks for. New or changed product text goes in the source-locale file; other locales are translated in the project unless the task supplies the translations.
-- Never read, print, ask for or write `LOCALNESS_TOKEN`. Never edit or commit `.localness/`.
-- `apply` writes drafts. Publishing happens in the Localness web app, so never say the text is live.
-
-## Workflow
+# Syncing locale files
 
 1. Run `localness diff --json`. Exit code 0: nothing differs. 1: differences. 2: error.
 2. Sort each difference by `kind` (table below) and list everything that needs a person.
@@ -49,18 +27,6 @@ When `hasBase` is false (the first sync), every changed text is `different`. Say
 
 ## New keys
 
-- Follow the naming of the neighbouring keys in the same file. When unsure, run `localness suggest-name "<source text>"`; it uses the project's AI quota and needs a read & write token, so ask before running it for many strings. Names starting with `__unnamed_` are reserved.
+- Name a new key after the project's key convention (`localness match --json` prints it as `convention`) and the neighbouring keys in the same file. `push` blocks a new key whose name breaks the convention, with reason `key-name`: rename it in the locale file and the code, then plan again. `localness suggest-name "<source text>"` asks the project's AI for one name, but it is slow, uses the project's AI quota and needs a read & write token: only use it for a few strings a person asked about. Names starting with `__unnamed_` are reserved.
 - A new key needs its text in the source-locale file. `apply` creates the key and publishes that source text; text in other locales becomes drafts.
 - A plan holds at most 200 keys and expires after an hour.
-
-## Problems
-
-- `Authentication failed`: the token is missing or invalid. Tell the person; they set `LOCALNESS_TOKEN` in `.env.local` next to the config.
-- `The token may not do this`: the token is read only. Tell the person; never look for another token.
-- No `localness.config.json`: ask the person before running `localness init`.
-
-## JSON shapes
-
-- `diff --json`: `{ sourceLocale, locales, content, hasBase, files, differences: [{ locale, key, kind, local, platform, draft, base, onPlatform }] }`
-- `push --json`: `{ id, path, expiresAt, sourceLocale, keys: [{ key, create, locales: { <locale>: { text, platform, draft } } }], blocked, leftOut }`; `id` is null when there is nothing to push.
-- `apply <id> --json`: `{ id, written: [{ key, created, locales }], failed }`

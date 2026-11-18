@@ -3,6 +3,7 @@ import {
   FORCED_PUSH_KINDS,
   PUSH_KINDS,
   compareLocaleFiles,
+  describeBlocked,
   planPush,
   prunePlans,
   resolveRelease,
@@ -10,7 +11,6 @@ import {
   type Comparison,
   type DiffKind,
   type LoadedConfig,
-  type PushBlocked,
   type PushPlan,
 } from '@localness/sdk/sync'
 import type { LocalnessClient } from '@localness/sdk'
@@ -19,13 +19,6 @@ import { list, loadProject, plural, type CliIo, type CliValues } from './shared'
 
 /** Never pushed without naming the key: either side may be the newer one. */
 const NEEDS_KEYS: readonly DiffKind[] = ['different', 'conflict']
-
-const BLOCK_REASONS: Record<PushBlocked['reason'], (source: string) => string> =
-  {
-    'no-source-text': (source) =>
-      `the ${source} file lacks it; a new key needs its source text`,
-    'reserved-name': () => '__unnamed_ names are reserved for unnamed drafts',
-  }
 
 export interface PlannedPush {
   plan: PushPlan
@@ -99,7 +92,7 @@ export function describePush(io: CliIo, planned: PlannedPush, dryRun: boolean) {
     io.stdout('Blocked:\n')
     for (const item of plan.blocked) {
       io.stdout(
-        `  ${item.key} (${item.locale}): ${BLOCK_REASONS[item.reason](plan.sourceLocale)}\n`,
+        `  ${item.key} (${item.locale}): ${describeBlocked(item, plan.sourceLocale)}\n`,
       )
     }
   }

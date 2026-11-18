@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -63,6 +64,23 @@ function project(initial: Record<string, Record<string, string>> = {}) {
         coverage: { keys: 0, projectKeys: 0, publishedPerLocale: {} },
         canManageReleases: false,
         generatedAt: 'now',
+      })
+    }
+    if (url.pathname.endsWith('/match')) {
+      const { texts } = JSON.parse(init!.body!) as { texts: string[] }
+      return reply({
+        matches: texts.map((text) => ({
+          text,
+          keys: Object.keys(keys)
+            .filter((key) => keys[key]!.en?.draftText === text)
+            .map((key) => ({
+              id: idOf(key),
+              key,
+              sourceText: text,
+              draft: false,
+              releaseIds: [],
+            })),
+        })),
       })
     }
     if (method !== 'GET') {
@@ -420,6 +438,60 @@ describe('commands', () => {
     expect(remote.labels['cart.new']).toEqual([3])
   })
 
+  it('match lists every key a text has; --json adds the naming rules', async () => {
+    await put(
+      'localness.config.json',
+      JSON.stringify({
+        baseUrl: BASE_URL,
+        files: { dir: 'locales', pattern: '{locale}.json' },
+      }),
+    )
+    const keyConvention = {
+      prefix: 'web',
+      separator: '_',
+      style: 'snake_case',
+      maxDepth: 3,
+      guidance: null,
+    }
+    const base = platform({
+      save: { en: 'Save' },
+      ok: { en: 'OK' },
+      dialog_ok: { en: 'OK' },
+    })
+    await put(
+      'locales/en.json',
+      JSON.stringify({
+        save: 'Save',
+        ok: 'OK',
+        draft_ok: ' OK\n',
+        hello: 'Hi',
+      }),
+    )
+    const fetch: FetchLike = async (input, init) => {
+      const response = await base(input, init)
+      if (!new URL(input).pathname.endsWith('/meta')) return response
+      const meta = (await response.json()) as object
+      const body = {
+        ...meta,
+        keyConvention,
+        namespaces: [{ id: 1, name: 'cart', sort: 0 }],
+      }
+      return { ...response, json: async () => body }
+    }
+    expect(await cli(['match', 'Save', 'OK', 'Hello'], fetch)).toBe(0)
+    expect(out.join('')).toBe(
+      '"Save" -> save\n"OK" -> 3 keys, pick one: ok, dialog_ok, draft_ok (local)\n"Hello" -> no key\n',
+    )
+    out.length = 0
+    expect(await cli(['match', '--json', 'Save'], fetch)).toBe(0)
+    expect(JSON.parse(out.join(''))).toMatchObject({
+      matches: [{ text: 'Save', keys: [{ key: 'save', source: 'platform' }] }],
+      convention: keyConvention,
+      namespaces: ['cart'],
+    })
+    expect(await cli(['match'], fetch)).toBe(2)
+  })
+
   it('fails without a token', async () => {
     await put('localness.config.json', JSON.stringify({ baseUrl: BASE_URL }))
     expect(await cli(['diff'], platform({}), '')).toBe(2)
@@ -470,6 +542,24 @@ describe('commands', () => {
     expect(await readFile(skill, 'utf8')).toMatch(/Extra rule/)
     expect(await install('--force')).toBe(0)
     expect(await readFile(skill, 'utf8')).toBe(text)
+
+    const reference = join(dirname(skill), 'references', 'extract.md')
+    const referenceText = await readFile(reference, 'utf8')
+    await writeFile(reference, `${referenceText}\nExtra step.\n`)
+    expect(await install()).toBe(2)
+    expect(await install('--force')).toBe(0)
+    expect(await readFile(reference, 'utf8')).toBe(referenceText)
+
+    // A single-file install from an older CLI is replaced, not kept as edited.
+    await rm(dirname(reference), { recursive: true })
+    const single = text.replace(/localness-hash: '[^']*'/, "localness-hash: ''")
+    const hash = createHash('sha256').update(single).digest('hex').slice(0, 16)
+    await writeFile(
+      skill,
+      single.replace("localness-hash: ''", `localness-hash: '${hash}'`),
+    )
+    expect(await install()).toBe(0)
+    expect(await readFile(reference, 'utf8')).toBe(referenceText)
 
     await writeFile(
       skill,

@@ -46,6 +46,8 @@ export interface ProjectData {
   locales: string[]
   /** Declared namespace names in the platform's display order. */
   namespaces: string[]
+  /** Namespace names are relative to it. */
+  keyPrefix: string
   releaseNames: Map<number, string>
   /** In the platform's order. */
   releases: ProjectRelease[]
@@ -76,6 +78,7 @@ export function buildProjectData(
     displayLocale: locales.displayLocale,
     locales: locales.available,
     namespaces: (meta.namespaces ?? []).map((namespace) => namespace.name),
+    keyPrefix: meta.keyConvention?.prefix ?? '',
     releaseNames: new Map(
       meta.releases.map((release) => [Number(release.id), release.name]),
     ),

@@ -8,6 +8,7 @@ import {
   applyPush,
   checkPlan,
   compareLocaleFiles,
+  describeBlocked,
   planPush,
   pullLocaleFiles,
   readBase,
@@ -355,7 +356,8 @@ export function registerSyncView(
         plan = { ...plan, release }
       }
       const blocked = plan.blocked.map(
-        (one) => `${one.key} (${one.locale}): ${one.reason}`,
+        (one) =>
+          `${one.key} (${one.locale}): ${describeBlocked(one, plan.sourceLocale)}`,
       )
       if (plan.keys.length === 0) {
         void vscode.window.showWarningMessage(

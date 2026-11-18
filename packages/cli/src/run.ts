@@ -5,6 +5,7 @@ import { runApply } from './apply'
 import { runDiff } from './diff'
 import { TOKEN_ENV } from './env'
 import { runInit } from './init'
+import { runMatch } from './lookup'
 import { runPull } from './pull'
 import { runPush } from './push'
 import { runReleases } from './releases'
@@ -26,6 +27,7 @@ Commands:
   push                 Plan sending local changes to the project; writes nothing
   apply <id>           Write a plan to the project (no id: list plans)
   sync                 pull the project's changes, then plan a push of local ones
+  match <text...>      Existing keys whose source text equals each text
   suggest-name <text>  Ask the project's AI for a key name; writes nothing
   releases [use|create|add|remove]
                        List releases, pick the one new keys get, create one,
@@ -62,8 +64,8 @@ Options:
   -v, --version        Show the version
 
 The token is ${TOKEN_ENV} from .env.local next to the config, else from the
-environment. Reading needs a read token; apply and suggest-name need a
-read & write token. "release" in the config labels the keys push and apply
+environment. Reading needs a read token; apply and suggest-name need
+a read & write token. "release" in the config labels the keys push and apply
 create; existing keys keep their labels. pull, sync and apply keep .localness/ next to the config:
 the last agreed text and pending plans, never committed.
 `
@@ -105,6 +107,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
     }
     if (command === 'suggest-name') {
       return await runSuggestName(io, values, rest.join(' '))
+    }
+    if (command === 'match') {
+      return await runMatch(io, values, rest)
     }
     if (command === 'releases') {
       return await runReleases(io, values, rest)

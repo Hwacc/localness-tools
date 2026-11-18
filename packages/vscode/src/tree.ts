@@ -27,10 +27,12 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
     if (!data) return []
     if (!node) {
       const keys = filterByRelease(data.keys, this.filter)
-      return groupByNamespace(keys, data.namespaces).map((group) => ({
-        type: 'group',
-        group,
-      }))
+      return groupByNamespace(keys, data.namespaces, data.keyPrefix).map(
+        (group) => ({
+          type: 'group',
+          group,
+        }),
+      )
     }
     if (node.type === 'group') {
       return node.group.items.map((state) => ({ type: 'key', state }))

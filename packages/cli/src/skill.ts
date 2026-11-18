@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { findConfigFile } from '@localness/sdk/sync'
 import { version } from '../package.json'
 import { EXIT_ERROR, list, type CliIo, type CliValues } from './shared'
 
 const SKILL_NAME = 'localness'
-const TEMPLATE = new URL('../skill/SKILL.md', import.meta.url)
+const TEMPLATE_DIR = fileURLToPath(new URL('../skill/', import.meta.url))
+const SKILL_FILE = 'SKILL.md'
+const REFERENCES = 'references'
 
 /** Folders each agent reads project skills from, its own first. */
 const AGENT_READS = {
@@ -76,21 +79,59 @@ function parseAgents(value: string | undefined): SkillAgent[] {
 const HASH_FIELD = /localness-hash: ["'][^"']*["']/
 const VERSION_FIELD = /localness-cli: ["']([^"']*)["']/
 
-/** Over the file without its own hash, ignoring line endings git may change. */
-function hashOf(text: string) {
-  return createHash('sha256')
-    .update(
-      text.replace(/\r\n/g, '\n').replace(HASH_FIELD, "localness-hash: ''"),
-    )
-    .digest('hex')
-    .slice(0, 16)
+/** Paths relative to the skill folder, with `/`; `SKILL.md` first. */
+export type SkillFiles = Map<string, string>
+
+const normalize = (text: string) => text.replace(/\r\n/g, '\n')
+
+/**
+ * Over SKILL.md without its own hash, then every reference, ignoring line
+ * endings git may change. Without references it is the hash of SKILL.md
+ * alone, as single-file installs recorded it.
+ */
+function hashOf(files: SkillFiles) {
+  const hash = createHash('sha256').update(
+    normalize(files.get(SKILL_FILE) ?? '').replace(
+      HASH_FIELD,
+      "localness-hash: ''",
+    ),
+  )
+  const references = [...files.keys()].filter((path) => path !== SKILL_FILE)
+  for (const path of references.sort()) {
+    hash.update(`\0${path}\n${normalize(files.get(path)!)}`)
+  }
+  return hash.digest('hex').slice(0, 16)
 }
 
-export async function renderSkill() {
-  const text = (await readFile(TEMPLATE, 'utf8'))
-    .replace(/\r\n/g, '\n')
-    .replace('{{version}}', version)
-  return text.replace(HASH_FIELD, `localness-hash: '${hashOf(text)}'`)
+/** SKILL.md and the files under `references/`; null without SKILL.md. */
+async function readSkillFolder(dir: string): Promise<SkillFiles | null> {
+  const skill = await readOptional(join(dir, SKILL_FILE))
+  if (skill === null) return null
+  const files: SkillFiles = new Map([[SKILL_FILE, skill]])
+  const entries = await readdir(join(dir, REFERENCES), {
+    withFileTypes: true,
+  }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  })
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    const path = `${REFERENCES}/${entry.name}`
+    files.set(path, await readFile(join(dir, REFERENCES, entry.name), 'utf8'))
+  }
+  return files
+}
+
+export async function renderSkill(): Promise<SkillFiles> {
+  const files = (await readSkillFolder(TEMPLATE_DIR))!
+  for (const [path, text] of files) files.set(path, normalize(text))
+  files.set(SKILL_FILE, files.get(SKILL_FILE)!.replace('{{version}}', version))
+  const hash = hashOf(files)
+  files.set(
+    SKILL_FILE,
+    files.get(SKILL_FILE)!.replace(HASH_FIELD, `localness-hash: '${hash}'`),
+  )
+  return files
 }
 
 export interface InstalledSkill {
@@ -99,12 +140,20 @@ export interface InstalledSkill {
   modified: boolean
 }
 
-export function readInstalledSkill(text: string): InstalledSkill {
+export function readInstalledSkill(files: SkillFiles): InstalledSkill {
+  const text = files.get(SKILL_FILE) ?? ''
   const hash = /localness-hash: ["']([0-9a-f]*)["']/.exec(text)?.[1]
   return {
     version: VERSION_FIELD.exec(text)?.[1] ?? null,
-    modified: !hash || hash !== hashOf(text),
+    modified: !hash || hash !== hashOf(files),
   }
+}
+
+function sameFiles(a: SkillFiles, b: SkillFiles) {
+  return (
+    a.size === b.size &&
+    [...a].every(([path, text]) => normalize(b.get(path) ?? '\0') === text)
+  )
 }
 
 async function exists(path: string) {
@@ -141,18 +190,20 @@ async function rootFor(io: CliIo, values: CliValues) {
   return repoRoot(await startDir(io, values))
 }
 
-function skillPath(root: string, dir: string) {
-  return join(root, ...dir.split('/'), SKILL_NAME, 'SKILL.md')
+function skillFolder(root: string, dir: string) {
+  return join(root, ...dir.split('/'), SKILL_NAME)
 }
 
 /** Installed copies under `root`, in any folder an agent reads. */
 export async function findInstalledSkills(root: string) {
   const found: { dir: string; path: string; skill: InstalledSkill }[] = []
   for (const dir of SKILL_DIRS) {
-    const path = skillPath(root, dir)
-    const text = await readOptional(path)
-    if (text !== null)
-      found.push({ dir, path, skill: readInstalledSkill(text) })
+    const folder = skillFolder(root, dir)
+    const files = await readSkillFolder(folder)
+    if (files !== null) {
+      const path = join(folder, SKILL_FILE)
+      found.push({ dir, path, skill: readInstalledSkill(files) })
+    }
   }
   return found
 }
@@ -224,27 +275,33 @@ export async function runSkill(
   ]
   const results: { path: string; action: Action }[] = []
   for (const dir of dirs) {
-    const path = skillPath(root, dir)
-    const current = await readOptional(path)
+    const folder = skillFolder(root, dir)
+    const current = await readSkillFolder(folder)
     let action: Action
     if (current === null) action = 'created'
-    else if (current.replace(/\r\n/g, '\n') === content) action = 'unchanged'
+    else if (sameFiles(content, current)) action = 'unchanged'
     else if (readInstalledSkill(current).modified && !force) action = 'modified'
     else action = 'updated'
     if (!dryRun && (action === 'created' || action === 'updated')) {
-      await mkdir(dirname(path), { recursive: true })
-      await writeFile(path, content, 'utf8')
+      for (const path of current?.keys() ?? []) {
+        if (!content.has(path)) await rm(join(folder, path), { force: true })
+      }
+      for (const [path, text] of content) {
+        const target = join(folder, path)
+        await mkdir(dirname(target), { recursive: true })
+        await writeFile(target, text, 'utf8')
+      }
     }
-    results.push({ path: relative(io.cwd, path), action })
+    results.push({ path: relative(io.cwd, join(folder, SKILL_FILE)), action })
   }
 
   let agentsMd: string | null = null
   if (values['agents-md']) {
     const path = join(root, AGENTS_MD)
-    const skillFile = relative(root, skillPath(root, dirs[0]!)).replace(
-      /\\/g,
-      '/',
-    )
+    const skillFile = relative(
+      root,
+      join(skillFolder(root, dirs[0]!), SKILL_FILE),
+    ).replace(/\\/g, '/')
     const current = await readOptional(path)
     const next = withAgentsBlock(current, agentsBlock(skillFile))
     if (!dryRun && next !== current) await writeFile(path, next, 'utf8')

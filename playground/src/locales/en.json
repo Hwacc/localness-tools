@@ -32,5 +32,10 @@
   "welcome": "Welcome",
   "home.hero.title": "Build once, ship everywhere",
   "ok": "OK",
-  "my_new_key": "My new key"
+  "my_new_key": "My new key",
+  "checkout_place_order": "Place order",
+  "checkout.apply_coupon": "Apply coupon",
+  "checkout_ShippingAddress": "Shipping address",
+  "checkout__close": "Close",
+  "checkout_summary_free_shipping_note": "Free shipping on this order"
 }

@@ -1,5 +1,9 @@
 import { normalizeLocaleText } from '@localness/contract/locale-file'
-import { isUnnamedKey } from '@localness/contract/rules'
+import {
+  KEY_VIOLATION_TEXT,
+  checkI18nKey,
+  isUnnamedKey,
+} from '@localness/contract/rules'
 import type { LocalnessClient } from '../client'
 import { LocalnessError } from '../errors'
 import type { DeliveryKeyState } from '../schemas'
@@ -39,7 +43,8 @@ export interface PlanPushOptions {
 /**
  * A key the project lacks is created from the source locale file's text, which
  * the project publishes; every other text becomes a draft that waits for a
- * publish in the web app. Throws past `MAX_PLAN_KEYS` keys.
+ * publish in the web app. A new key whose name breaks the project's key
+ * convention is blocked, not created. Throws past `MAX_PLAN_KEYS` keys.
  */
 export function planPush(
   loaded: LoadedConfig,
@@ -52,6 +57,8 @@ export function planPush(
   const blocked: PushBlocked[] = []
   const block = (entry: DiffEntry, reason: PushBlocked['reason']) =>
     blocked.push({ locale: entry.locale, key: entry.key, reason })
+  const convention = comparison.platform.keyConvention
+  const misnamed = new Set<string>()
 
   for (const entry of comparison.entries) {
     if (!kinds.has(entry.kind) || entry.local === null) continue
@@ -63,6 +70,18 @@ export function planPush(
     if (!item) {
       let create: PushKey['create'] = null
       if (!entry.onPlatform) {
+        if (misnamed.has(entry.key)) continue
+        const violations = convention ? checkI18nKey(entry.key, convention) : []
+        if (violations.length > 0) {
+          misnamed.add(entry.key)
+          blocked.push({
+            locale: entry.locale,
+            key: entry.key,
+            reason: 'key-name',
+            violations,
+          })
+          continue
+        }
         const sourceText = comparison.local[source]?.[entry.key]
         if (sourceText === undefined) {
           block(entry, 'no-source-text')
@@ -97,6 +116,20 @@ export function planPush(
     release: options.release ?? null,
     keys: [...keys.values()],
     blocked,
+  }
+}
+
+/** Why a plan left a key out, for a person. */
+export function describeBlocked(item: PushBlocked, sourceLocale: string) {
+  switch (item.reason) {
+    case 'no-source-text':
+      return `the ${sourceLocale} file lacks it; a new key needs its source text`
+    case 'reserved-name':
+      return '__unnamed_ names are reserved for unnamed drafts'
+    case 'key-name':
+      return `breaks the project's key convention: ${(item.violations ?? [])
+        .map((violation) => KEY_VIOLATION_TEXT[violation].toLowerCase())
+        .join('; ')}`
   }
 }
 

@@ -12,11 +12,13 @@ import {
   loadConfig,
   parseConfig,
   PULL_KINDS,
+  FORCED_PUSH_KINDS,
   PUSH_KINDS,
   applyPush,
   checkPlan,
   listPlans,
   planPull,
+  describeBlocked,
   planPush,
   prunePlans,
   readBase,
@@ -237,6 +239,45 @@ describe('locale file sync', () => {
       skipped: ['a.b'],
     })
     expect(JSON.parse(file!.output!)).toEqual({ cta: 'Go now' })
+  })
+
+  it("blocks new keys whose name breaks the project's convention", async () => {
+    const loaded = await setup()
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ old: 'Old!', web: { ok: 'Ok' }, Bad: 'Bad' }),
+    )
+    await writeFile(
+      join(root, 'locales', 'ja.json'),
+      JSON.stringify({ Bad: 'B' }),
+    )
+    const client = createClient({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      fetch: platform({ old: { en: { publishedText: 'Old' } } }).fetch,
+    })
+    const comparison = await compareLocaleFiles(loaded, client)
+    comparison.platform.keyConvention = {
+      prefix: 'web',
+      separator: '.',
+      style: 'snake_case',
+      maxDepth: 4,
+      guidance: null,
+    }
+    const plan = planPush(loaded, comparison, { kinds: FORCED_PUSH_KINDS })
+    expect(plan.keys.map((item) => [item.key, Boolean(item.create)])).toEqual([
+      ['old', false],
+      ['web.ok', true],
+    ])
+    expect(plan.blocked).toEqual([
+      {
+        locale: 'en',
+        key: 'Bad',
+        reason: 'key-name',
+        violations: ['prefix', 'case'],
+      },
+    ])
+    expect(describeBlocked(plan.blocked[0]!, 'en')).toMatch(/key convention/)
   })
 
   it('records a base, then plans pushes for local changes only', async () => {
