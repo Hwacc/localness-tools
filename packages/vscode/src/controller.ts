@@ -181,6 +181,7 @@ export class DataController implements vscode.Disposable {
         states.value,
         locales,
         states.fetchedAt,
+        loaded.config.release,
       )
       this.#set({ kind: 'ready' })
     } catch (error) {

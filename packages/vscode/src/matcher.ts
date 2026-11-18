@@ -36,13 +36,18 @@ export class KeyMatcher implements vscode.Disposable {
     return readSettings().languages.includes(document.languageId)
   }
 
+  /** Keys in text that is not open as a document; throws on a broken pattern. */
+  keysInText(text: string) {
+    return extractKeys(text, this.#regexes)
+  }
+
   keysIn(document: vscode.TextDocument): DocumentKey[] {
     const id = document.uri.toString()
     const cached = this.#cache.get(id)
     if (cached?.version === document.version) return cached.keys
     let keys: DocumentKey[]
     try {
-      keys = extractKeys(document.getText(), this.#regexes).map((match) => ({
+      keys = this.keysInText(document.getText()).map((match) => ({
         ...match,
         range: new vscode.Range(
           document.positionAt(match.start),

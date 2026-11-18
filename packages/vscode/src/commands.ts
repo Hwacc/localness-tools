@@ -1,17 +1,18 @@
-import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { createClient } from '@localness/sdk'
-import { CONFIG_FILE_NAME } from '@localness/sdk/sync'
+import { CONFIG_FILE_NAME, writeConfigFields } from '@localness/sdk/sync'
 import { findProjectConfig, tokenKey, type DataController } from './controller'
+import type { LocalChanges } from './localChanges'
 import { projectSetting } from './core/data'
 import { describeError } from './core/errors'
 import { localeIcon, localeName } from './core/locales'
-import { withProject } from './core/projectConfig'
 import { isValidBaseUrl, keyUrl, trimBaseUrl } from './core/urls'
 import { editTranslation } from './edit'
+import { openKeyInLocaleFile } from './localFiles'
 import type { KeyMatcher } from './matcher'
 import { searchKeys } from './search'
+import { showKeyUsages } from './usages'
 import {
   INLINE_HINT_MODES,
   readSettings,
@@ -64,25 +65,6 @@ async function configPath(): Promise<string | undefined> {
   return join(folder.uri.fsPath, CONFIG_FILE_NAME)
 }
 
-async function readSource(path: string) {
-  try {
-    return await readFile(path, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
-    throw error
-  }
-}
-
-async function saveProject(
-  path: string,
-  baseUrl: string,
-  project: string | number,
-) {
-  const source = await readSource(path)
-  const next = withProject(source, baseUrl, project)
-  if (next !== source) await writeFile(path, next, 'utf8')
-}
-
 async function signIn(
   controller: DataController,
   secrets: vscode.SecretStorage,
@@ -120,7 +102,7 @@ async function signIn(
     }
     await createClient({ baseUrl, token, project }).meta()
     await secrets.store(tokenKey(baseUrl), token)
-    await saveProject(path, baseUrl, project)
+    await writeConfigFields(path, { baseUrl, project })
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Localness: ${describeError(error, baseUrl)}`,
@@ -145,7 +127,10 @@ async function selectProject(
     const { projects } = await createClient({ baseUrl, token }).projects()
     const picked = await pickProject(projects)
     if (!picked) return
-    await saveProject(loaded.path, baseUrl, projectSetting(projects, picked))
+    await writeConfigFields(loaded.path, {
+      baseUrl,
+      project: projectSetting(projects, picked),
+    })
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Localness: ${describeError(error, baseUrl)}`,
@@ -245,7 +230,11 @@ function accountItems(): MenuItem[] {
   ]
 }
 
-function showMenu(controller: DataController, extensionUri: vscode.Uri) {
+function showMenu(
+  controller: DataController,
+  changes: LocalChanges,
+  extensionUri: vscode.Uri,
+) {
   const { status, data } = controller
   const settings = readSettings()
   const pick = vscode.window.createQuickPick<MenuItem>()
@@ -288,7 +277,27 @@ function showMenu(controller: DataController, extensionUri: vscode.Uri) {
     pick.placeholder = placeholder
     pick.buttons = [searchButton, refreshButton, accountButton]
     pick.matchOnDescription = true
+    const command = (name: string) => () => vscode.commands.executeCommand(name)
+    const status: MenuItem[] = [
+      {
+        label: data.missingRelease
+          ? `$(warning) Release: ${data.missingRelease}`
+          : `$(tag) Release: ${data.release?.name ?? 'none'}`,
+        description: data.missingRelease
+          ? 'not in the project; pick another'
+          : 'labels keys you extract or push',
+        run: command('localness.selectRelease'),
+      },
+    ]
+    if (changes.count > 0) {
+      status.push({
+        label: `$(git-compare) ${changes.count} local ${changes.count === 1 ? 'change' : 'changes'}`,
+        description: 'Open Local Files',
+        run: command('localness.sync.focus'),
+      })
+    }
     pick.items = [
+      ...status,
       { label: 'Display locale', kind: SEPARATOR },
       ...locales,
       { label: 'Hint mode', kind: SEPARATOR },
@@ -322,9 +331,18 @@ function showMenu(controller: DataController, extensionUri: vscode.Uri) {
   pick.show()
 }
 
+/** A key name, from a hover link (`{ key }`) or a Keys view node (`{ state }`). */
+type KeyArg = string | { key?: unknown; state?: { key?: unknown } }
+
+function keyOf(arg: KeyArg | undefined) {
+  const key = typeof arg === 'string' ? arg : (arg?.key ?? arg?.state?.key)
+  return typeof key === 'string' ? key : undefined
+}
+
 export function registerCommands(
   controller: DataController,
   matcher: KeyMatcher,
+  changes: LocalChanges,
   { secrets, extensionUri }: vscode.ExtensionContext,
 ): vscode.Disposable {
   const register = vscode.commands.registerCommand
@@ -332,10 +350,19 @@ export function registerCommands(
     register('localness.editTranslation', (arg?: unknown) =>
       editTranslation(controller, matcher, arg),
     ),
-    register('localness.copyKey', async (arg?: { key?: unknown }) => {
-      if (typeof arg?.key !== 'string') return
-      await vscode.env.clipboard.writeText(arg.key)
-      vscode.window.setStatusBarMessage(`Copied ${arg.key}`, 2000)
+    register('localness.copyKey', async (arg?: KeyArg) => {
+      const key = keyOf(arg)
+      if (!key) return
+      await vscode.env.clipboard.writeText(key)
+      vscode.window.setStatusBarMessage(`Copied ${key}`, 2000)
+    }),
+    register('localness.findUsages', (arg?: KeyArg) => {
+      const key = keyOf(arg)
+      if (key) return showKeyUsages(controller, matcher, key)
+    }),
+    register('localness.openLocalFile', (arg?: KeyArg) => {
+      const key = keyOf(arg)
+      if (key) return openKeyInLocaleFile(controller, key)
     }),
     register('localness.signIn', () => signIn(controller, secrets)),
     register('localness.signOut', async () => {
@@ -352,19 +379,25 @@ export function registerCommands(
     register('localness.switchInlineHintMode', switchInlineHintMode),
     register('localness.refresh', () => controller.reload(true)),
     register('localness.searchKeys', () => searchKeys(controller)),
-    register('localness.showMenu', () => showMenu(controller, extensionUri)),
-    register('localness.openKey', async (keyId: number) => {
-      const data = controller.data
-      if (!data) return
-      await vscode.env.openExternal(
-        vscode.Uri.parse(
-          keyUrl({
-            baseUrl: controller.baseUrl,
-            projectId: data.projectId,
-            keyId,
-          }),
-        ),
-      )
-    }),
+    register('localness.showMenu', () =>
+      showMenu(controller, changes, extensionUri),
+    ),
+    register(
+      'localness.openKey',
+      async (arg: number | { state?: { id?: unknown } }) => {
+        const keyId = typeof arg === 'number' ? arg : arg?.state?.id
+        const data = controller.data
+        if (!data || typeof keyId !== 'number') return
+        await vscode.env.openExternal(
+          vscode.Uri.parse(
+            keyUrl({
+              baseUrl: controller.baseUrl,
+              projectId: data.projectId,
+              keyId,
+            }),
+          ),
+        )
+      },
+    ),
   )
 }

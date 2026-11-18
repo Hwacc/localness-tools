@@ -57,13 +57,23 @@ export function hoverMarkdown(info: HoverInfo) {
           { key },
           'Edit any locale of this key',
         ),
+        commandLink(
+          '$(tag) Releases…',
+          'localness.editReleases',
+          { key },
+          'Edit the releases this key is labelled with',
+        ),
       ],
     }),
   )
   markdown.supportThemeIcons = true
   markdown.supportHtml = true
   markdown.isTrusted = {
-    enabledCommands: ['localness.editTranslation', 'localness.copyKey'],
+    enabledCommands: [
+      'localness.editTranslation',
+      'localness.copyKey',
+      'localness.editReleases',
+    ],
   }
   return markdown
 }

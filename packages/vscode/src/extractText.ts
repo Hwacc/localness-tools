@@ -15,7 +15,9 @@ import {
 } from './core/extractText'
 import { describeError } from './core/errors'
 import { stateFor, truncate } from './core/keys'
+import { pullKey } from './localFiles'
 import type { KeyMatcher } from './matcher'
+import { releaseForNewKeys } from './releases'
 
 const COMMAND = 'localness.extractText'
 const UNNAMED_PREFIX = '__unnamed_'
@@ -137,6 +139,7 @@ interface ChosenKey {
 async function createNamedKey(
   client: LocalnessClient,
   text: string,
+  releaseId: number | undefined,
 ): Promise<ChosenKey | undefined> {
   let name = ''
   for (;;) {
@@ -149,7 +152,12 @@ async function createNamedKey(
           location: vscode.ProgressLocation.Window,
           title: 'Localness: creating key',
         },
-        () => client.createKey({ key: name || undefined, sourceText: text }),
+        () =>
+          client.createKey({
+            key: name || undefined,
+            sourceText: text,
+            releaseId,
+          }),
       )
       return { key: result.key.key, state: result.key, reused: false }
     } catch (error) {
@@ -286,12 +294,18 @@ export async function extractText(
     if (hit === undefined) return
     if (hit) chosen = { key: hit.key, reused: true }
   }
-  chosen ??= await createNamedKey(client, site.text)
+  if (!chosen) {
+    const release = releaseForNewKeys(controller)
+    if (release === undefined) return
+    chosen = await createNamedKey(client, site.text, release?.id)
+  }
   if (!chosen) return
 
   const state =
     chosen.state ?? (await loadState(controller, client, chosen.key))
   if (state) controller.applyKeyState(state)
+  // The key exists on the project now, whatever happens to the code edit.
+  await pullKey(controller, chosen.key)
   const templates = mergeExtractTemplates(
     controller.config?.config.extractTemplates,
   )

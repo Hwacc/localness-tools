@@ -10,9 +10,12 @@ Shows Localness translation keys where you use them. Read-only; requires a Local
 - **Inline hints**: the display-locale text after each key (`inline`, truncated, styled by `localness.inlineHintStyle`) or in place of the key (`replace`; the key reappears per `localness.replaceRevealOn`). Switch with `Localness: Switch inline hint mode`.
 - **Key underline**: keys that exist in the project get a dotted underline.
 - **Diagnostics**: a warning on keys that do not exist in the project (_Key not found in Localness_).
-- **Keys view** (activity bar): keys grouped by namespace with state icons; click a key to open it in Localness.
+- **Keys view** (activity bar): keys grouped by namespace with state icons. Click a key to find where the code uses it: one usage opens directly, several open a list that previews each. With `files` configured, the file button opens the display locale's file at the key (the source locale's when the key is not there yet). The context menu also opens the key in Localness, edits a translation and copies the key.
 - **Search** (`Localness: Search keys`): matches key names and source text, from the local cache first, then the server for larger result sets.
-- **Status bar**: project and display locale. Click it for a menu that switches the display locale and hint mode in one step; its title buttons search, refresh, and open project and account actions.
+- **Releases**: the status bar menu's Release entry picks the release that keys created by **Extract to Localness** and push are labelled with (stored as `release` in `localness.config.json`); project owners can create one there. **Edit releases…** (hover link, or the Keys view context menu on keys, namespaces or a multi-selection) adds and removes release labels on existing keys; a release on only some of the selected keys stays as it is unless selected. The Keys view's filter button shows one release's keys or keys without one.
+- **Status bar**: one item showing the display locale, the release for new keys and the number of local changes; hover it for links that switch the locale, change the release, review or push changes. Click it for a menu that switches the display locale and hint mode in one step; its title buttons search, refresh, and open project and account actions.
+- **Locale files** (when `localness.config.json` has `files`): after an extraction, the key is written to the local locale files, keeping local changes; after an edit, that locale's text is written even over a local change. What is written follows `content` (`published` by default, so a draft edit waits for its publish).
+- **Local Files view** (activity bar): what differs between the locale files and the project, grouped by kind (new, changed or removed in the project, local changes, conflicts, waiting for publish), with the count as a badge and in the Localness status bar item. Click an entry to compare both texts; inline buttons open the locale file at the key, pull the project's text (asking before replacing a local change) and push the local text (after a confirmation listing what will be created and which drafts written; needs a Read & write token). Pushed translations are drafts until published in Localness. The title bar pulls every project change and pushes every local change; its terminal button runs the CLI (`localness.cliCommand`) for reviewed push plans.
 
 Only the source locale and the display locale are downloaded. Data is kept in memory and cached under the extension's global storage; the cache is shown immediately and refreshed in the background, when the window regains focus, and on `Localness: Refresh`. The cache can contain draft text.
 
@@ -36,14 +39,15 @@ The extension uses the nearest `localness.config.json` at or above the active fi
 
 ## Project configuration (`localness.config.json`)
 
-| Field                   | Default   | Description                                                           |
-| ----------------------- | --------- | --------------------------------------------------------------------- |
-| `baseUrl`               | required  | Localness instance URL.                                               |
-| `project`               | none      | Project id or name. Missing: the token's only project.                |
-| `keyPatterns`           | `[]`      | Extra regular expressions finding keys; the key is capture group 1.   |
-| `useDefaultKeyPatterns` | `true`    | Keep the built-in patterns alongside `keyPatterns`.                   |
-| `extractTemplates`      | see below | Code written by **Extract to Localness**, per site.                   |
-| `files`, `locales`, ... |           | Local locale files, used by the CLI; see the `@localness/cli` README. |
+| Field                   | Default   | Description                                                                                 |
+| ----------------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `baseUrl`               | required  | Localness instance URL.                                                                     |
+| `project`               | none      | Project id or name. Missing: the token's only project.                                      |
+| `keyPatterns`           | `[]`      | Extra regular expressions finding keys; the key is capture group 1.                         |
+| `useDefaultKeyPatterns` | `true`    | Keep the built-in patterns alongside `keyPatterns`.                                         |
+| `extractTemplates`      | see below | Code written by **Extract to Localness**, per site.                                         |
+| `release`               | none      | Release that keys created by extract or push are labelled with; set it from the status bar. |
+| `files`, `locales`, ... |           | Local locale files, shared with the CLI; see the `@localness/cli` README.                   |
 
 `extractTemplates` overrides any of these; `{key}` is the key and `{attr}` the attribute name. An entry without `{key}` is ignored:
 
@@ -74,6 +78,7 @@ Personal display preferences stay in VS Code settings:
 | `localness.keyUnderline`        | `true`                                                                | Underline keys that exist in the project.                         |
 | `localness.diagnostics`         | `true`                                                                | Warn about unknown keys.                                          |
 | `localness.languages`           | `typescript, typescriptreact, javascript, javascriptreact, vue, html` | Language ids in which keys are recognised.                        |
+| `localness.cliCommand`          | `"localness"`                                                         | How the Local Files view runs the CLI, e.g. `npx localness`.      |
 
 ## Key detection
 

@@ -9,6 +9,7 @@ import type { ProjectData } from './core/data'
 import { describeError } from './core/errors'
 import { editableText, textFor, truncate } from './core/keys'
 import { localeName } from './core/locales'
+import { pullKey } from './localFiles'
 import type { KeyMatcher } from './matcher'
 
 export interface EditTarget {
@@ -145,6 +146,7 @@ async function editLocale(
         locales: { [locale]: { text: mine, expected } },
       })
       controller.applyKeyState(result.key)
+      await pullKey(controller, state.key, locale)
       openKeyLater(`Localness: saved a draft of ${label}.`, state.id)
       return
     } catch (error) {

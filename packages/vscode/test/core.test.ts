@@ -11,7 +11,7 @@ import {
 } from '../src/core/data'
 import { describeError } from '../src/core/errors'
 import { localeIcon, localeName } from '../src/core/locales'
-import { withProject } from '../src/core/projectConfig'
+import { filterByRelease, releaseChanges } from '../src/core/releases'
 import {
   buildHoverInfo,
   escapeMarkdown,
@@ -243,6 +243,18 @@ describe('project data', () => {
     expect(data.namespaces).toEqual(['app'])
     expect(data.releaseNames.get(7)).toBe('v1')
     expect(data.index.get('app.bye')).toBe(bye)
+    expect(data.release).toBeNull()
+  })
+
+  it('resolves the config release by name', () => {
+    const states = { sourceLocale: 'en', keys, total: 2, generatedAt: '' }
+    const locales = resolveLocales(meta, 'ja')
+    const data = buildProjectData(meta, states, locales, 1, 'V1')
+    expect(data.release).toEqual({ id: 7, name: 'v1' })
+    expect(buildProjectData(meta, states, locales, 1, 'v9')).toMatchObject({
+      release: null,
+      missingRelease: 'v9',
+    })
   })
 
   it('stores a project name only when it is unique', () => {
@@ -254,29 +266,28 @@ describe('project data', () => {
   })
 })
 
-describe('withProject', () => {
-  it('creates a config file', () => {
-    expect(withProject(undefined, 'https://l.example', 'web')).toBe(
-      '{\n  "baseUrl": "https://l.example",\n  "project": "web"\n}\n',
-    )
+describe('releases', () => {
+  const key = (id: number, releaseIds: number[]) =>
+    ({ id, key: `k${id}`, releaseIds }) as unknown as DeliveryKeyState
+  const a = key(1, [7])
+  const b = key(2, [7, 8])
+  const c = key(3, [])
+
+  it('filters keys by release or by having none', () => {
+    expect(filterByRelease([a, b, c], 8)).toEqual([b])
+    expect(filterByRelease([a, b, c], 'unassigned')).toEqual([c])
+    expect(filterByRelease([a, b, c], undefined)).toHaveLength(3)
   })
 
-  it('keeps other fields and their order', () => {
-    const source = '{"files":{"dir":"locales"},"project":"old","baseUrl":"x"}'
-    expect(JSON.parse(withProject(source, 'https://l.example', 3))).toEqual({
-      files: { dir: 'locales' },
-      project: 3,
-      baseUrl: 'https://l.example',
-    })
-    expect(Object.keys(JSON.parse(withProject(source, 'u', 3)))).toEqual([
-      'files',
-      'project',
-      'baseUrl',
+  it('adds picks, removes releases every key had, keeps partial ones', () => {
+    expect(releaseChanges([a, b], [7, 8, 9], new Set([9]))).toEqual([
+      { releaseId: 7, mode: 'remove', keyIds: [1, 2] },
+      { releaseId: 9, mode: 'add', keyIds: [1, 2] },
     ])
-  })
-
-  it('rejects a non-object file', () => {
-    expect(() => withProject('[]', 'u', 1)).toThrow('JSON object')
+    expect(releaseChanges([a, b], [7, 8], new Set([7, 8]))).toEqual([
+      { releaseId: 8, mode: 'add', keyIds: [1] },
+    ])
+    expect(releaseChanges([b], [7, 8], new Set([7, 8]))).toEqual([])
   })
 })
 

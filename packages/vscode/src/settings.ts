@@ -21,6 +21,8 @@ export interface Settings {
   keyUnderline: boolean
   diagnostics: boolean
   languages: string[]
+  /** How to run the Localness CLI in a terminal. */
+  cliCommand: string
 }
 
 export function readSettings(): Settings {
@@ -40,6 +42,7 @@ export function readSettings(): Settings {
     keyUnderline: config.get('keyUnderline', true),
     diagnostics: config.get('diagnostics', true),
     languages: config.get('languages', []),
+    cliCommand: config.get('cliCommand', '').trim() || 'localness',
   }
 }
 

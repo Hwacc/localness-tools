@@ -6,9 +6,12 @@ import { registerDiagnostics } from './diagnostics'
 import { registerExtractText } from './extractText'
 import { registerInlineHints } from './hints'
 import { registerHover } from './hover'
+import { registerSyncView } from './syncView'
 import { KeyMatcher } from './matcher'
 import { registerStatusBar } from './statusBar'
 import { registerTree } from './tree'
+import { registerReleases } from './releases'
+import { LocalChanges } from './localChanges'
 
 const FOCUS_DEBOUNCE_MS = 1500
 const FOCUS_MIN_INTERVAL_MS = 30_000
@@ -17,6 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
   const log = vscode.window.createOutputChannel('Localness')
   const controller = new DataController(context)
   const matcher = new KeyMatcher(log, controller)
+  const changes = new LocalChanges()
   const configWatcher = vscode.workspace.createFileSystemWatcher(
     `**/${CONFIG_FILE_NAME}`,
   )
@@ -28,6 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
     log,
     controller,
     matcher,
+    changes,
     configWatcher,
     configWatcher.onDidCreate(reloadConfig),
     configWatcher.onDidChange(reloadConfig),
@@ -36,12 +41,14 @@ export function activate(context: vscode.ExtensionContext) {
       () => void controller.followEditor(),
     ),
     vscode.workspace.onDidChangeWorkspaceFolders(reloadConfig),
-    registerStatusBar(controller),
-    registerTree(controller),
+    registerStatusBar(controller, changes),
+    registerSyncView(controller, changes),
+    registerTree(controller, context),
+    registerReleases(controller),
     registerHover(controller, matcher),
     registerInlineHints(controller, matcher),
     registerDiagnostics(controller, matcher),
-    registerCommands(controller, matcher, context),
+    registerCommands(controller, matcher, changes, context),
     registerExtractText(controller, matcher),
     context.secrets.onDidChange((event) => {
       if (event.key.startsWith('localness.token:')) void controller.reload(true)

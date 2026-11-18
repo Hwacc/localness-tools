@@ -1,9 +1,12 @@
-import type {
-  DeliveryKeyState,
-  DeliveryMeta,
-  DeliveryProjectRef,
-  KeyStatesResult,
+import {
+  findRelease,
+  type DeliveryKeyState,
+  type DeliveryMeta,
+  type DeliveryProjectRef,
+  type KeyStatesResult,
+  type ProjectRelease,
 } from '@localness/sdk'
+import type { ReleaseRef } from '@localness/sdk/sync'
 import { buildIndex } from './keys'
 
 export interface ResolvedLocales {
@@ -44,6 +47,13 @@ export interface ProjectData {
   /** Declared namespace names in the platform's display order. */
   namespaces: string[]
   releaseNames: Map<number, string>
+  /** In the platform's order. */
+  releases: ProjectRelease[]
+  canManageReleases: boolean
+  /** The config's `release`, labelling keys the editor creates. */
+  release: ReleaseRef | null
+  /** A config `release` the project does not have. */
+  missingRelease: string | undefined
   keys: DeliveryKeyState[]
   index: Map<string, DeliveryKeyState>
   fetchedAt: number
@@ -54,7 +64,11 @@ export function buildProjectData(
   states: KeyStatesResult,
   locales: ResolvedLocales,
   fetchedAt: number,
+  configRelease?: string,
 ): ProjectData {
+  const found = configRelease
+    ? findRelease(meta.releases, configRelease)
+    : undefined
   return {
     projectId: meta.project.id,
     projectName: meta.project.name,
@@ -65,6 +79,10 @@ export function buildProjectData(
     releaseNames: new Map(
       meta.releases.map((release) => [Number(release.id), release.name]),
     ),
+    releases: [...meta.releases].sort((a, b) => a.sort - b.sort),
+    canManageReleases: meta.canManageReleases,
+    release: found ? { id: Number(found.id), name: found.name } : null,
+    missingRelease: configRelease && !found ? configRelease : undefined,
     keys: states.keys,
     index: buildIndex(states.keys),
     fetchedAt,
