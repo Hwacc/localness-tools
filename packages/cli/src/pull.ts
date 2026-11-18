@@ -1,12 +1,8 @@
 import {
   FORCED_PULL_KINDS,
   PULL_KINDS,
-  applyPull,
   compareLocaleFiles,
-  planPull,
-  recordPull,
-  requireFiles,
-  writeBase,
+  pullLocaleFiles,
   type Comparison,
   type DiffKind,
   type LoadedConfig,
@@ -27,15 +23,7 @@ export async function pullInto(
   comparison: Comparison,
   options: { kinds: readonly DiffKind[]; prune: boolean; dryRun: boolean },
 ): Promise<PullRun> {
-  const files = planPull(comparison, {
-    format: requireFiles(loaded).format,
-    kinds: options.kinds,
-    prune: options.prune,
-  })
-  if (!options.dryRun) {
-    await applyPull(files)
-    await writeBase(loaded, recordPull(comparison, files))
-  }
+  const files = await pullLocaleFiles(loaded, comparison, options)
   const kept = options.prune
     ? 0
     : comparison.entries.filter(

@@ -29,10 +29,13 @@ function project(initial: Record<string, Record<string, string>> = {}) {
     }
   }
   const writes: { method: string; body: unknown; client?: string }[] = []
-  const state = (key: string, id = 0) => ({
-    id,
+  const releases = [{ id: 3, name: 'v2', sort: 1 }]
+  const labels: Record<string, number[]> = {}
+  const idOf = (key: string) => Object.keys(keys).indexOf(key) + 1
+  const state = (key: string) => ({
+    id: idOf(key),
     key,
-    releaseIds: [],
+    releaseIds: labels[key] ?? [],
     draft: false,
     locales: Object.fromEntries(
       Object.entries(keys[key] ?? {}).map(([locale, text]) => [
@@ -56,7 +59,7 @@ function project(initial: Record<string, Record<string, string>> = {}) {
         sourceLocale: 'en',
         localeFallback: 'en',
         release: null,
-        releases: [],
+        releases,
         coverage: { keys: 0, projectKeys: 0, publishedPerLocale: {} },
         canManageReleases: false,
         generatedAt: 'now',
@@ -66,6 +69,7 @@ function project(initial: Record<string, Record<string, string>> = {}) {
       const body = JSON.parse(init!.body!) as {
         key: string
         sourceText?: string
+        releaseId?: number
         locales?: Record<string, { text: string; expected: string }>
       }
       writes.push({
@@ -73,10 +77,33 @@ function project(initial: Record<string, Record<string, string>> = {}) {
         body,
         client: init?.headers?.['x-localness-client'],
       })
+      if (url.pathname.endsWith('/releases')) {
+        const created = {
+          id: 9,
+          name: (body as unknown as { name: string }).name,
+          sort: 2,
+        }
+        releases.push(created)
+        return reply(created)
+      }
+      if (url.pathname.endsWith('/release-membership')) {
+        const { releaseId, ids, mode } = body as unknown as {
+          releaseId: number
+          ids: number[]
+          mode: string
+        }
+        for (const key of Object.keys(keys)) {
+          if (!ids.includes(idOf(key))) continue
+          const own = (labels[key] ?? []).filter((id) => id !== releaseId)
+          labels[key] = mode === 'add' ? [...own, releaseId] : own
+        }
+        return reply({ ok: true, changed: ids.length })
+      }
       if (method === 'POST') {
         keys[body.key] = {
           en: { draftText: body.sourceText!, publishedText: body.sourceText! },
         }
+        if (body.releaseId) labels[body.key] = [body.releaseId]
       } else {
         for (const [locale, edit] of Object.entries(body.locales!)) {
           const current = keys[body.key]![locale]
@@ -99,14 +126,14 @@ function project(initial: Record<string, Record<string, string>> = {}) {
     const names = Object.keys(keys).filter((key) => !only || only.includes(key))
     return reply({
       sourceLocale: 'en',
-      keys: names.map((key, id) => state(key, id)),
+      keys: names.map(state),
       total: names.length,
       offset: 0,
       limit: 1000,
       generatedAt: 'now',
     })
   }
-  return { fetch, keys, writes }
+  return { fetch, keys, writes, labels }
 }
 
 function platform(keys: Record<string, Record<string, string>>): FetchLike {
@@ -327,6 +354,70 @@ describe('commands', () => {
       /changed since plan .* \(cta\); nothing was written/,
     )
     expect(remote.writes).toEqual([])
+  })
+
+  it('releases picks the label for new keys and relabels existing ones', async () => {
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    await put('locales/en.json', '{ "cart": { "buy": "Buy", "pay": "Pay" } }')
+    const remote = project({
+      'cart.buy': { en: 'Buy' },
+      'cart.pay': { en: 'Pay' },
+      home: { en: 'Home' },
+    })
+    const config = async () =>
+      JSON.parse(await readFile(join(root, 'localness.config.json'), 'utf8'))
+
+    expect(await cli(['releases', 'use', 'V9'], remote.fetch)).toBe(2)
+    expect(err.join('')).toMatch(/no release "V9"; it has v2/)
+    expect(await cli(['releases', 'use'], remote.fetch)).toBe(2)
+    expect(await cli(['releases', 'use', 'V2'], remote.fetch)).toBe(0)
+    expect((await config()).release).toBe('v2')
+    out.length = 0
+    expect(await cli(['releases'], remote.fetch)).toBe(0)
+    expect(out.join('')).toBe('* v2\n')
+
+    expect(await cli(['releases', 'create', 'v3', '--use'], remote.fetch)).toBe(
+      0,
+    )
+    expect((await config()).release).toBe('v3')
+    expect(await cli(['releases', 'use', '--none'], remote.fetch)).toBe(0)
+    expect((await config()).release).toBeUndefined()
+
+    out.length = 0
+    expect(
+      await cli(['releases', 'add', 'v2', '--match', 'cart.*'], remote.fetch),
+    ).toBe(0)
+    expect(out.join('')).toMatch(/cart\.buy\n  cart\.pay\n.*pass --yes/s)
+    expect(remote.labels).toEqual({})
+    expect(
+      await cli(
+        ['releases', 'add', 'v2', '--match', 'cart.*', '--yes'],
+        remote.fetch,
+      ),
+    ).toBe(0)
+    expect(remote.labels).toEqual({ 'cart.buy': [3], 'cart.pay': [3] })
+    expect(
+      await cli(['releases', 'remove', 'v2', 'cart.pay'], remote.fetch),
+    ).toBe(0)
+    expect(remote.labels['cart.pay']).toEqual([])
+    expect(await cli(['releases', 'add', 'v2', 'nope'], remote.fetch)).toBe(2)
+    expect(err.join('')).toMatch(/no key nope/)
+
+    await cli(['sync'], remote.fetch)
+    await cli(['releases', 'use', 'v2'], remote.fetch)
+    await put(
+      'locales/en.json',
+      '{ "cart": { "buy": "Buy", "pay": "Pay", "new": "New" } }',
+    )
+    out.length = 0
+    expect(await cli(['push'], remote.fetch), err.join('')).toBe(0)
+    expect(out.join('')).toMatch(/1 key \(1 new, labelled v2\)/)
+    const id = /Plan (\S+):/.exec(out.join(''))![1]!
+    expect(await cli(['apply', id], remote.fetch), err.join('')).toBe(0)
+    expect(remote.labels['cart.new']).toEqual([3])
   })
 
   it('fails without a token', async () => {

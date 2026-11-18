@@ -10,6 +10,8 @@ export interface CliIo {
   env: Record<string, string | undefined>
   stdout(text: string): void
   stderr(text: string): void
+  /** Asks the person at the terminal; absent when nobody can answer. */
+  prompt?(question: string): Promise<string>
   fetch?: FetchLike
 }
 
@@ -33,6 +35,11 @@ export const OPTIONS = {
   agent: { type: 'string' },
   'agents-md': { type: 'boolean' },
   root: { type: 'string' },
+  release: { type: 'string' },
+  none: { type: 'boolean' },
+  use: { type: 'boolean' },
+  match: { type: 'string' },
+  yes: { type: 'boolean', short: 'y' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean', short: 'v' },
 } as const

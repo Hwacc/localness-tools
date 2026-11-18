@@ -25,19 +25,21 @@ localness push                                            # plan sending local c
 localness apply 3f9a1c2e                                  # write that plan to the project as drafts
 localness sync                                            # pull, then plan a push
 localness suggest-name "Save changes"                     # ask the project's AI for a key name
+localness releases use v2.4                               # label the keys push creates with release v2.4
 localness skill install                                   # teach coding agents this workflow
 ```
 
-| Command         | What it does                                                                                                                                                                                                                  |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `init`          | Looks for `dir/{locale}.json` or `dir/{locale}/name.json` layouts, detects flat or nested JSON and writes `localness.config.json`. With `LOCALNESS_TOKEN` set it also fills `project` and maps project locales to file names. |
-| `diff`          | Classifies each difference (see below). Read only; never writes the base.                                                                                                                                                     |
-| `pull`          | Writes `platform-added`, `platform-changed` and `different` into the files and records the base. Local-only keys are kept unless `--prune`. Keys whose path collides with the file's structure are skipped and reported.      |
-| `push`          | Plans `local-added` and `local-changed` into `.localness/plans/<id>.json` and prints the id. Writes nothing to the project. Keys without source text or with a reserved name are listed as blocked.                           |
-| `apply [id]`    | Re-reads the planned keys; if any changed on the project since the plan, or the plan is over an hour old, deletes the plan and writes nothing. Otherwise creates new keys and writes drafts. No id: lists pending plans.      |
-| `sync`          | Pulls `platform-added` and `platform-changed`, then plans a push like `push`. Never touches `different` or `conflict`.                                                                                                        |
-| `suggest-name`  | Prints the project's suggested key name for a source text. Uses AI quota; writes nothing.                                                                                                                                     |
-| `skill install` | Installs the Agent Skill for coding agents; see [Coding agents](#coding-agents).                                                                                                                                              |
+| Command         | What it does                                                                                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`          | Looks for `dir/{locale}.json` or `dir/{locale}/name.json` layouts, detects flat or nested JSON and writes `localness.config.json`. With `LOCALNESS_TOKEN` set it also fills `project` and maps project locales to file names.                                                                                           |
+| `diff`          | Classifies each difference (see below). Read only; never writes the base.                                                                                                                                                                                                                                               |
+| `pull`          | Writes `platform-added`, `platform-changed` and `different` into the files and records the base. Local-only keys are kept unless `--prune`. Keys whose path collides with the file's structure are skipped and reported.                                                                                                |
+| `push`          | Plans `local-added` and `local-changed` into `.localness/plans/<id>.json` and prints the id. Writes nothing to the project. Keys without source text or with a reserved name are listed as blocked.                                                                                                                     |
+| `apply [id]`    | Re-reads the planned keys; if any changed on the project since the plan, or the plan is over an hour old, deletes the plan and writes nothing. Otherwise creates new keys and writes drafts. No id: lists pending plans.                                                                                                |
+| `sync`          | Pulls `platform-added` and `platform-changed`, then plans a push like `push`. Never touches `different` or `conflict`.                                                                                                                                                                                                  |
+| `suggest-name`  | Prints the project's suggested key name for a source text. Uses AI quota; writes nothing.                                                                                                                                                                                                                               |
+| `releases`      | Lists the project's releases (`*` marks the config's). `use <name>` / `use --none` sets the release new keys get; `create <name> [--use]` adds one (project owners). `add\|remove <release> <key...>` relabels existing keys; `--match <glob>` selects keys and asks before changing them (`--yes` skips the question). |
+| `skill install` | Installs the Agent Skill for coding agents; see [Coding agents](#coding-agents).                                                                                                                                                                                                                                        |
 
 `push` and `apply` only write drafts; publishing stays on the platform. A plan holds at most 200 keys.
 
@@ -72,6 +74,11 @@ The base (`.localness/base.json`, next to the config) is the last text the file 
 | `--agent <a,b>`        | skill install                         | `copilot`, `claude`, `cursor`, `codex` or `all`. Default: the first three.     |
 | `--agents-md`          | skill install                         | Also add a block pointing to the Skill in the root `AGENTS.md`.                |
 | `--root <path>`        | skill install                         | Install here instead of the git root, for a folder opened on its own.          |
+| `--release <name>`     | init                                  | Release new keys are labelled with.                                            |
+| `--none`               | releases use                          | No release for new keys.                                                       |
+| `--use`                | releases create                       | Also make the new release the config's.                                        |
+| `--match <glob>`       | releases add, releases remove         | Keys to relabel, e.g. `checkout.*`.                                            |
+| `--yes`, `-y`          | releases add, releases remove         | Skip the confirmation for `--match`.                                           |
 
 Exit codes: `0` success (for `diff`: no differences), `1` `diff` found differences, `2` error (including a stale, expired or failed `apply`).
 
@@ -111,16 +118,17 @@ Shared with the VS Code extension. Commit it; tokens never go here.
 }
 ```
 
-| Field                                                      | Default           | Description                                                                     |
-| ---------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------- |
-| `baseUrl`                                                  | required          | Localness instance URL.                                                         |
-| `project`                                                  | none              | Project id or name. Missing: the token's only project.                          |
-| `files.dir`                                                | required in files | Locale directory, relative to the config file.                                  |
-| `files.pattern`                                            | `{locale}.json`   | File path under `dir`; `{locale}` is the file name of the locale.               |
-| `files.format`                                             | `nested-json`     | `nested-json` (`{ "a": { "b": "…" } }`) or `flat-json` (`{ "a.b": "…" }`).      |
-| `locales`                                                  | all               | Platform locales to sync.                                                       |
-| `localeMap`                                                | none              | Platform locale → file name, when the file is not named after the locale.       |
-| `content`                                                  | `published`       | `published` compares what `/bundle` serves; `draft` previews unpublished edits. |
-| `keyPatterns`, `useDefaultKeyPatterns`, `extractTemplates` |                   | Used by the VS Code extension.                                                  |
+| Field                                                      | Default           | Description                                                                                                                  |
+| ---------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`                                                  | required          | Localness instance URL.                                                                                                      |
+| `project`                                                  | none              | Project id or name. Missing: the token's only project.                                                                       |
+| `files.dir`                                                | required in files | Locale directory, relative to the config file.                                                                               |
+| `files.pattern`                                            | `{locale}.json`   | File path under `dir`; `{locale}` is the file name of the locale.                                                            |
+| `files.format`                                             | `nested-json`     | `nested-json` (`{ "a": { "b": "…" } }`) or `flat-json` (`{ "a.b": "…" }`).                                                   |
+| `locales`                                                  | all               | Platform locales to sync.                                                                                                    |
+| `localeMap`                                                | none              | Platform locale → file name, when the file is not named after the locale.                                                    |
+| `release`                                                  | none              | Release the keys `apply` creates are labelled with. Set it with `localness releases use`. Sync is never filtered by release. |
+| `content`                                                  | `published`       | `published` compares what `/bundle` serves; `draft` previews unpublished edits.                                              |
+| `keyPatterns`, `useDefaultKeyPatterns`, `extractTemplates` |                   | Used by the VS Code extension.                                                                                               |
 
 Keys of unnamed drafts (`__unnamed_…`) are never written.

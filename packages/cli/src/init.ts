@@ -8,7 +8,7 @@ import {
   localeFilesScopeError,
   readLocaleFile,
 } from '@localness/contract/locale-file'
-import { createClient } from '@localness/sdk'
+import { createClient, findRelease } from '@localness/sdk'
 import {
   CONFIG_FILE_NAME,
   parseConfig,
@@ -233,6 +233,19 @@ export async function runInit(io: CliIo, values: CliValues) {
     })
     const meta = await client.meta()
     config.project ??= meta.project.name
+    if (values.release) {
+      const release = findRelease(meta.releases, values.release)
+      if (!release) {
+        throw new Error(
+          `The project has no release "${values.release}"; it has ${meta.releases.map((item) => item.name).join(', ') || 'none'}.`,
+        )
+      }
+      config.release = release.name
+    } else if (meta.releases.length > 0) {
+      notes.push(
+        `New keys get no release; "localness releases use" picks one (${meta.releases.map((item) => item.name).join(', ')}).`,
+      )
+    }
     const { localeMap, withoutFile, unmatched } = matchLocales(
       meta.locales,
       names,
@@ -249,6 +262,7 @@ export async function runInit(io: CliIo, values: CliValues) {
       )
     }
   } else {
+    if (values.release) config.release = values.release
     notes.push(
       `${TOKEN_ENV} is not set in ${ENV_FILE} or the environment, so file names were not checked against the project's locales.`,
     )

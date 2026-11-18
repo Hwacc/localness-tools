@@ -5,6 +5,7 @@ import {
   compareLocaleFiles,
   planPush,
   prunePlans,
+  resolveRelease,
   savePlan,
   type Comparison,
   type DiffKind,
@@ -12,6 +13,7 @@ import {
   type PushBlocked,
   type PushPlan,
 } from '@localness/sdk/sync'
+import type { LocalnessClient } from '@localness/sdk'
 import { countKinds, quote } from './diff'
 import { list, loadProject, plural, type CliIo, type CliValues } from './shared'
 
@@ -35,10 +37,15 @@ export interface PlannedPush {
 export async function planPushFrom(
   io: CliIo,
   loaded: LoadedConfig,
+  client: LocalnessClient,
   comparison: Comparison,
   options: { kinds: readonly DiffKind[]; dryRun: boolean },
 ): Promise<PlannedPush> {
   const plan = planPush(loaded, comparison, { kinds: options.kinds })
+  // Only a plan that creates keys needs the release, so a stale name never blocks updates.
+  if (plan.keys.some((item) => item.create)) {
+    plan.release = await resolveRelease(loaded, client)
+  }
   if (!options.dryRun) await prunePlans(loaded)
   const path =
     plan.keys.length > 0 && !options.dryRun
@@ -57,6 +64,7 @@ export function pushJson({ plan, path, leftOut }: PlannedPush) {
     path,
     expiresAt: path ? plan.expiresAt : null,
     sourceLocale: plan.sourceLocale,
+    release: plan.release?.name ?? null,
     keys: plan.keys,
     blocked: plan.blocked,
     leftOut: leftOut.map(({ locale, key, kind }) => ({ locale, key, kind })),
@@ -70,7 +78,7 @@ export function describePush(io: CliIo, planned: PlannedPush, dryRun: boolean) {
   } else {
     const created = plan.keys.filter((item) => item.create).length
     io.stdout(
-      `${dryRun ? 'Would plan' : `Plan ${plan.id}`}: ${plural(plan.keys.length, 'key')}${created > 0 ? ` (${created} new)` : ''}\n`,
+      `${dryRun ? 'Would plan' : `Plan ${plan.id}`}: ${plural(plan.keys.length, 'key')}${created > 0 ? ` (${created} new${plan.release ? `, labelled ${plan.release.name}` : ''})` : ''}\n`,
     )
     for (const item of plan.keys) {
       io.stdout(`  ${item.create ? 'create' : 'update'} ${item.key}\n`)
@@ -115,7 +123,7 @@ export async function runPush(io: CliIo, values: CliValues) {
     keys,
   })
   const dryRun = values['dry-run'] ?? false
-  const planned = await planPushFrom(io, loaded, comparison, {
+  const planned = await planPushFrom(io, loaded, client, comparison, {
     kinds: keys ? FORCED_PUSH_KINDS : PUSH_KINDS,
     dryRun,
   })

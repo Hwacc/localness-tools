@@ -7,6 +7,7 @@ import { TOKEN_ENV } from './env'
 import { runInit } from './init'
 import { runPull } from './pull'
 import { runPush } from './push'
+import { runReleases } from './releases'
 import { EXIT_ERROR, OPTIONS, type CliIo } from './shared'
 import { runSkill, warnOutdatedSkill } from './skill'
 import { runSuggestName } from './suggest-name'
@@ -26,6 +27,9 @@ Commands:
   apply <id>           Write a plan to the project (no id: list plans)
   sync                 pull the project's changes, then plan a push of local ones
   suggest-name <text>  Ask the project's AI for a key name; writes nothing
+  releases [use|create|add|remove]
+                       List releases, pick the one new keys get, create one,
+                       or label existing keys
   skill install        Install the Agent Skill that teaches coding agents
                        this workflow, at the repository root
 
@@ -49,12 +53,18 @@ Options:
   --agents-md          Also point AGENTS.md at the Skill (skill install)
   --root <path>        Folder the agents open, when it is not the git root
                        (skill install)
+  --release <name>     Release new keys are labelled with (init)
+  --none               No release for new keys (releases use)
+  --use                Also use the release created (releases create)
+  --match <glob>       Keys to label, e.g. "checkout.*" (releases add/remove)
+  -y, --yes            Skip the confirmation of --match
   -h, --help           Show this help
   -v, --version        Show the version
 
 The token is ${TOKEN_ENV} from .env.local next to the config, else from the
 environment. Reading needs a read token; apply and suggest-name need a
-read & write token. pull, sync and apply keep .localness/ next to the config:
+read & write token. "release" in the config labels the keys push and apply
+create; existing keys keep their labels. pull, sync and apply keep .localness/ next to the config:
 the last agreed text and pending plans, never committed.
 `
 
@@ -95,6 +105,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
     }
     if (command === 'suggest-name') {
       return await runSuggestName(io, values, rest.join(' '))
+    }
+    if (command === 'releases') {
+      return await runReleases(io, values, rest)
     }
     const allowed = command === 'apply' || command === 'skill' ? 1 : 0
     if (rest.length > allowed) {

@@ -53,6 +53,14 @@ When `hasBase` is false (the first sync), every changed text is `different`. Say
 - A new key needs its text in the source-locale file. `apply` creates the key and publishes that source text; text in other locales becomes drafts.
 - A plan holds at most 200 keys and expires after an hour.
 
+## Releases
+
+Releases are labels on keys in the project; they never filter what is synced. `release` in `localness.config.json` labels the keys `apply` creates, and the plan's `release` says which one. Existing keys keep their labels.
+
+- Never change the config's release, create a release or relabel keys unless a person asked. `localness releases` lists them and marks the current one.
+- `localness releases use <name>` (or `--none`) picks the release for new keys; `releases create <name> --use` creates one and needs a project owner's token.
+- `localness releases add <release> <key...>` and `releases remove …` relabel existing keys and need a read & write token. With `--match <glob>`, first run it without `--yes` and `--json` to list the matched keys, show them to the person, and pass `--yes` only after they approve.
+
 ## Problems
 
 - `Authentication failed`: the token is missing or invalid. Tell the person; they set `LOCALNESS_TOKEN` in `.env.local` next to the config.
@@ -62,5 +70,5 @@ When `hasBase` is false (the first sync), every changed text is `different`. Say
 ## JSON shapes
 
 - `diff --json`: `{ sourceLocale, locales, content, hasBase, files, differences: [{ locale, key, kind, local, platform, draft, base, onPlatform }] }`
-- `push --json`: `{ id, path, expiresAt, sourceLocale, keys: [{ key, create, locales: { <locale>: { text, platform, draft } } }], blocked, leftOut }`; `id` is null when there is nothing to push.
+- `push --json`: `{ id, path, expiresAt, sourceLocale, release, keys: [{ key, create, locales: { <locale>: { text, platform, draft } } }], blocked, leftOut }`; `id` is null when there is nothing to push; `release` is the name new keys get, or null.
 - `apply <id> --json`: `{ id, written: [{ key, created, locales }], failed }`

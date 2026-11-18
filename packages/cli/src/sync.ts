@@ -20,7 +20,7 @@ export async function runSync(io: CliIo, values: CliValues) {
     prune: false,
     dryRun,
   })
-  const pushed = await planPushFrom(io, loaded, comparison, {
+  const pushed = await planPushFrom(io, loaded, client, comparison, {
     kinds: PUSH_KINDS,
     dryRun,
   })
