@@ -29,6 +29,11 @@
         "category": "Localness"
       },
       {
+        "command": "localness.openReview",
+        "title": "Open waiting review",
+        "category": "Localness"
+      },
+      {
         "command": "localness.signOut",
         "title": "Sign out",
         "category": "Localness"

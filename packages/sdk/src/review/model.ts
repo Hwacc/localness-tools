@@ -3,9 +3,9 @@ import {
   checkI18nKey,
   keyViolationErrors,
   keyViolationWarnings,
-  type DeliveryKeyConvention,
   type KeyViolation,
-} from '@localness/sdk'
+} from '@localness/contract/rules'
+import type { DeliveryKeyConvention } from '../schemas'
 
 const UNNAMED_PREFIX = '__unnamed_'
 
@@ -52,6 +52,8 @@ export interface ReviewDoc {
   sourceLocale: string
   /** URL scheme that opens files in the person's editor. */
   editor: 'vscode' | 'cursor'
+  /** Where it is shown; only `editor` reviews are claimed by the extension. */
+  open?: 'browser' | 'editor'
   convention: DeliveryKeyConvention | null
   namespaces: string[]
   rows: ReviewRow[]

@@ -28,6 +28,13 @@
   "settings.language.hebrew": "Hebrew (עברית)",
   "settings.profile.bio": "Tell us about yourself (日本語・中文・한국어 welcome)",
   "settings.profile.nickname": "Nickname",
+  "settings_profile_changes_saved": "Your changes have been saved.",
+  "settings_profile_nickname_placeholder": "How should we call you?",
+  "settings_profile_display_name": "Display name",
+  "settings_profile_upload_avatar": "Upload avatar",
+  "settings_profile_email_notifications": "Email notifications",
+  "settings_profile_updated": "Profile updated.",
+  "settings_profile_save_changes": "Save changes",
   "settings.theme.dark": "Dark mode",
   "welcome": "Welcome",
   "home.hero.title": "Build once, ship everywhere",
@@ -37,5 +44,11 @@
   "checkout.apply_coupon": "Apply coupon",
   "checkout_ShippingAddress": "Shipping address",
   "checkout__close": "Close",
-  "checkout_summary_free_shipping_note": "Free shipping on this order"
+  "checkout_summary_free_shipping_note": "Free shipping on this order",
+  "checkout_order_summary": "Order summary",
+  "checkout_close_dialog": "Close dialog",
+  "checkout_coupon": "Coupon",
+  "checkout_coupon_placeholder": "Enter coupon code",
+  "checkout_arrival_days": "Your order will arrive in {days} days.",
+  "checkout_spring_sale": "Spring sale: take 20% off every order over $50 until the end of the month."
 }

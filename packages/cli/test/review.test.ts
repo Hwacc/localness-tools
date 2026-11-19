@@ -1,12 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  checkDecisions,
-  decisionWarnings,
-  initialDecision,
-  parseReviewInput,
-  type ReviewDoc,
-  type ReviewResult,
-} from '../src/review/model'
+import type { ReviewDoc, ReviewResult } from '@localness/sdk/review'
 import { startReviewServer, type RunningReview } from '../src/review/server'
 
 const convention = {
@@ -55,94 +48,6 @@ function doc(): ReviewDoc {
 }
 
 const none = async () => new Set<string>()
-
-describe('review model', () => {
-  it('reads the agent file and rejects rows without text', () => {
-    expect(
-      parseReviewInput({ items: [{ text: 'Hi', line: 3, key: 'hi' }] }),
-    ).toEqual([{ text: 'Hi', file: undefined, line: 3, key: 'hi' }])
-    expect(() => parseReviewInput([{ text: ' ' }])).toThrow('items[0]')
-    expect(() => parseReviewInput([{ text: 'Hi', line: '3' }])).toThrow(
-      'number',
-    )
-  })
-
-  it('reuses a single match, asks on several, names the rest', () => {
-    expect(doc().rows.map(initialDecision)).toEqual([
-      { action: 'reuse', key: 'save' },
-      { action: 'reuse', key: '' },
-      { action: 'create', key: 'checkout_apply_coupon' },
-      { action: 'create', key: 'checkout_pay' },
-    ])
-  })
-
-  it('flags convention breaks, taken names and one name for two texts', async () => {
-    const errors = await checkDecisions(
-      doc(),
-      [
-        { action: 'reuse', key: 'save' },
-        { action: 'reuse', key: '' },
-        { action: 'create', key: 'checkout..apply' },
-        { action: 'create', key: 'checkout_pay' },
-      ],
-      async (names) => new Set(names.filter((name) => name === 'checkout_pay')),
-    )
-    expect(errors[0]).toBeNull()
-    expect(errors[1]).toMatch(/Pick/)
-    expect(errors[2]).toBe('Has an empty segment')
-    expect(errors[3]).toBe('checkout_pay already exists.')
-
-    const [, local] = await checkDecisions(
-      doc(),
-      [
-        { action: 'skip', key: '' },
-        { action: 'reuse', key: 'dialog__ok' },
-        { action: 'skip', key: '' },
-        { action: 'skip', key: '' },
-      ],
-      none,
-    )
-    expect(local).toMatch(/^Push will block this local key: /)
-
-    const shared = await checkDecisions(
-      doc(),
-      [
-        { action: 'skip', key: '' },
-        { action: 'reuse', key: 'dialog_ok' },
-        { action: 'create', key: 'checkout_go' },
-        { action: 'create', key: 'checkout_go' },
-      ],
-      none,
-    )
-    expect(shared).toEqual([
-      null,
-      null,
-      'checkout_go is also used for a different text.',
-      'checkout_go is also used for a different text.',
-    ])
-  })
-
-  it('only warns when a new name is off the suggested style', async () => {
-    const decisions = [
-      { action: 'reuse', key: 'save' },
-      { action: 'reuse', key: 'ok' },
-      { action: 'create', key: 'checkout.ApplyCoupon' },
-      { action: 'skip', key: '' },
-    ] as const
-    expect(await checkDecisions(doc(), [...decisions], none)).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ])
-    expect(decisionWarnings(doc(), [...decisions])).toEqual([
-      null,
-      null,
-      'Off the suggested key style: Uses a separator other than the configured one; Does not match the configured casing',
-      null,
-    ])
-  })
-})
 
 describe('review server', () => {
   let review: RunningReview | undefined

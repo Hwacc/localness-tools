@@ -30,8 +30,9 @@ Commands:
   sync                 pull the project's changes, then plan a push of local ones
   match <text...>      Existing keys whose source text equals each text
   suggest-name <text>  Ask the project's AI for a key name; writes nothing
-  review start <file>  Open a browser page to decide, per extracted text, which
-                       key it gets (reuse, new or skip)
+  review start <file>  Open a page to decide, per extracted text, which key it
+                       gets (reuse, new or skip): in the editor when the
+                       Localness extension has the project open, else the browser
   review wait <id>     Print the decisions once approved (JSON; "pending" after
                        --timeout)
   releases [use|create|add|remove]
@@ -65,6 +66,8 @@ Options:
   --use                Also use the release created (releases create)
   --match <glob>       Keys to label, e.g. "checkout.*" (releases add/remove)
   --timeout <seconds>  How long review wait waits (default 90)
+  --open <where>       Where review start shows the page: auto (default),
+                       browser or editor
   -y, --yes            Skip the confirmation of --match
   -h, --help           Show this help
   -v, --version        Show the version

@@ -28,6 +28,16 @@
         "default": "./dist/sync.cjs"
       }
     },
+    "./review": {
+      "import": {
+        "types": "./dist/review.d.mts",
+        "default": "./dist/review.mjs"
+      },
+      "require": {
+        "types": "./dist/review.d.cts",
+        "default": "./dist/review.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "repository": {

@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@localness/sdk/sync', replacement: sdk('sync/index.ts') },
+      { find: '@localness/sdk/review', replacement: sdk('review/index.ts') },
       { find: '@localness/sdk', replacement: sdk('index.ts') },
     ],
   },

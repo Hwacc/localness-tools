@@ -11,25 +11,25 @@ export function CheckoutSummary({ days, onClose }: { days: number; onClose: () =
   return (
     <section className="checkout-summary" data-testid="checkout-summary">
       <header>
-        <h2>Order summary</h2>
-        <button aria-label="Close dialog" onClick={onClose}>×</button>
+        <h2>{t('checkout_order_summary')}</h2>
+        <button aria-label={t('checkout_close_dialog')} onClick={onClose}>×</button>
       </header>
       <p>{t('cart.total', { amount: 42 })}</p>
       <label>
-        Coupon
-        <input placeholder="Enter coupon code" />
+        {t('checkout_coupon')}
+        <input placeholder={t('checkout_coupon_placeholder')} />
       </label>
-      <button>Apply coupon</button>
-      <h3>Shipping address</h3>
-      <p>Your order will arrive in {days} days.</p>
+      <button>{t('checkout.apply_coupon')}</button>
+      <h3>{t('checkout_ShippingAddress')}</h3>
+      <p>{t('checkout_arrival_days', { days })}</p>
       <p>
-        Spring sale: take 20% off every order over $50 until the end of the month.
+        {t('checkout_spring_sale')}
       </p>
       <footer>
-        <button onClick={onClose}>Cancel</button>
-        <button onClick={submit}>Place order</button>
-        <a href="/login">Sign in</a>
-        <a href="/forgot">Forgot password?</a>
+        <button onClick={onClose}>{t('cancel')}</button>
+        <button onClick={submit}>{t('checkout_place_order')}</button>
+        <a href="/login">{t('auth.login.submit')}</a>
+        <a href="/forgot">{t('auth-forgot-password')}</a>
       </footer>
     </section>
   )

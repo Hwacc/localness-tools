@@ -11,6 +11,7 @@ import { KeyMatcher } from './matcher'
 import { registerStatusBar } from './statusBar'
 import { registerTree } from './tree'
 import { registerReleases } from './releases'
+import { registerReview } from './review'
 import { LocalChanges } from './localChanges'
 
 const FOCUS_DEBOUNCE_MS = 1500
@@ -50,6 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
     registerDiagnostics(controller, matcher),
     registerCommands(controller, matcher, changes, context),
     registerExtractText(controller, matcher),
+    registerReview(controller, log),
     context.secrets.onDidChange((event) => {
       if (event.key.startsWith('localness.token:')) void controller.reload(true)
     }),

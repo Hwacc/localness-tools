@@ -40,6 +40,7 @@ export const OPTIONS = {
   use: { type: 'boolean' },
   match: { type: 'string' },
   timeout: { type: 'string' },
+  open: { type: 'string' },
   yes: { type: 'boolean', short: 'y' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean', short: 'v' },
