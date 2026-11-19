@@ -3,11 +3,13 @@ import type { DataController } from './controller'
 import type { ProjectData } from './core/data'
 import {
   buildHoverInfo,
+  buildLocalHoverInfo,
   renderHoverMarkdown,
   type HoverInfo,
 } from './core/hover'
 import { keyUrl } from './core/urls'
 import type { DeliveryKeyState } from '@localness/sdk'
+import type { LocalChanges } from './localChanges'
 import type { KeyMatcher } from './matcher'
 import { readSettings } from './settings'
 
@@ -31,40 +33,59 @@ export function hoverInfoFor(
 function commandLink(
   label: string,
   command: string,
-  arg: object,
+  arg: unknown,
   title: string,
 ) {
   const args = encodeURIComponent(JSON.stringify([arg]))
   return `[${label}](command:${command}?${args} "${title}")`
 }
 
+const LOCAL_LINKS = (key: string) => ({
+  title: [commandLink('$(copy)', 'localness.copyKey', { key }, 'Copy key')],
+  footer: [
+    commandLink(
+      '$(cloud-upload) Push to Localness',
+      'localness.sync.pushKey',
+      key,
+      'Create the key in Localness from the locale files',
+    ),
+  ],
+})
+
 export function hoverMarkdown(info: HoverInfo) {
   const { key } = info
   const markdown = new vscode.MarkdownString(
-    renderHoverMarkdown(info, {
-      edit: (locale) =>
-        commandLink(
-          '$(edit)',
-          'localness.editTranslation',
-          { key, locale },
-          `Edit ${locale}`,
-        ),
-      title: [commandLink('$(copy)', 'localness.copyKey', { key }, 'Copy key')],
-      footer: [
-        commandLink(
-          '$(globe) Other locales…',
-          'localness.editTranslation',
-          { key },
-          'Edit any locale of this key',
-        ),
-        commandLink(
-          '$(tag) Releases…',
-          'localness.editReleases',
-          { key },
-          'Edit the releases this key is labelled with',
-        ),
-      ],
-    }),
+    renderHoverMarkdown(
+      info,
+      info.url === undefined
+        ? LOCAL_LINKS(key)
+        : {
+            edit: (locale) =>
+              commandLink(
+                '$(edit)',
+                'localness.editTranslation',
+                { key, locale },
+                `Edit ${locale}`,
+              ),
+            title: [
+              commandLink('$(copy)', 'localness.copyKey', { key }, 'Copy key'),
+            ],
+            footer: [
+              commandLink(
+                '$(globe) Other locales…',
+                'localness.editTranslation',
+                { key },
+                'Edit any locale of this key',
+              ),
+              commandLink(
+                '$(tag) Releases…',
+                'localness.editReleases',
+                { key },
+                'Edit the releases this key is labelled with',
+              ),
+            ],
+          },
+    ),
   )
   markdown.supportThemeIcons = true
   markdown.supportHtml = true
@@ -73,6 +94,7 @@ export function hoverMarkdown(info: HoverInfo) {
       'localness.editTranslation',
       'localness.copyKey',
       'localness.editReleases',
+      'localness.sync.pushKey',
     ],
   }
   return markdown
@@ -81,6 +103,7 @@ export function hoverMarkdown(info: HoverInfo) {
 export function registerHover(
   controller: DataController,
   matcher: KeyMatcher,
+  changes: LocalChanges,
 ): vscode.Disposable {
   const provider: vscode.HoverProvider = {
     provideHover(document, position) {
@@ -89,8 +112,17 @@ export function registerHover(
       const hit = matcher
         .keysIn(document)
         .find((match) => match.range.contains(position))
-      const state = hit && data.index.get(hit.key)
-      if (!hit || !state) return undefined
+      if (!hit) return undefined
+      const state = data.index.get(hit.key)
+      if (!state) {
+        const local = changes.localOnly.get(hit.key)
+        return local
+          ? new vscode.Hover(
+              hoverMarkdown(buildLocalHoverInfo(hit.key, local, data)),
+              hit.range,
+            )
+          : undefined
+      }
       return new vscode.Hover(
         hoverMarkdown(hoverInfoFor(controller, data, state)),
         hit.range,

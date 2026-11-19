@@ -24,7 +24,7 @@ import type { LocalnessClient } from '@localness/sdk'
 import type { DataController } from './controller'
 import { describeError } from './core/errors'
 import { showKeyInFile } from './localFiles'
-import { truncate } from './core/keys'
+import { localOnlyTexts, truncate } from './core/keys'
 import { readSettings } from './settings'
 import { releaseForNewKeys } from './releases'
 import type { LocalChanges } from './localChanges'
@@ -205,6 +205,7 @@ export function registerSyncView(
       entries.filter(
         (entry) => PUSH_KINDS.includes(entry.kind) && pushable(entry),
       ).length,
+      localOnlyTexts(entries),
     )
     view.message =
       message ??
@@ -497,6 +498,17 @@ export function registerSyncView(
     ),
     vscode.commands.registerCommand('localness.sync.push', (node?: Node) =>
       push(nodeEntries(node, PUSH_KINDS, pushable)),
+    ),
+    vscode.commands.registerCommand(
+      'localness.sync.pushKey',
+      (arg: string | { key: string }) => {
+        const key = typeof arg === 'string' ? arg : arg.key
+        return push(
+          (provider.comparison?.entries ?? []).filter(
+            (entry) => entry.key === key && pushable(entry),
+          ),
+        )
+      },
     ),
     vscode.commands.registerCommand('localness.sync.compare', compare),
     vscode.commands.registerCommand('localness.sync.openFile', (node: Node) =>

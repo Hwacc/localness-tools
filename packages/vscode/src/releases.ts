@@ -107,7 +107,9 @@ function keysOf(
   for (const node of nodes as Array<Record<string, any> | undefined>) {
     const found: DeliveryKeyState[] =
       node?.type === 'group'
-        ? node.group.items
+        ? node.group.items.flatMap((item: { state?: DeliveryKeyState }) =>
+            item.state ? [item.state] : [],
+          )
         : node?.state
           ? [node.state]
           : typeof node?.key === 'string' && data.index.get(node.key)

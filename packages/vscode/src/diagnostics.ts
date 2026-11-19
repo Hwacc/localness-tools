@@ -1,12 +1,14 @@
 import * as vscode from 'vscode'
 import type { DataController } from './controller'
 import { findMissingKeys } from './core/keys'
+import type { LocalChanges } from './localChanges'
 import type { KeyMatcher } from './matcher'
 import { readSettings } from './settings'
 
 export function registerDiagnostics(
   controller: DataController,
   matcher: KeyMatcher,
+  changes: LocalChanges,
 ): vscode.Disposable {
   const collection = vscode.languages.createDiagnosticCollection('localness')
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -21,7 +23,10 @@ export function registerDiagnostics(
       collection.delete(document.uri)
       return
     }
-    const missing = findMissingKeys(matcher.keysIn(document), data.index)
+    const missing = findMissingKeys(
+      matcher.keysIn(document),
+      data.index,
+    ).filter((match) => !changes.localOnly.has(match.key))
     collection.set(
       document.uri,
       missing.map((match) => {
@@ -44,6 +49,7 @@ export function registerDiagnostics(
   return vscode.Disposable.from(
     collection,
     controller.onDidChange(updateAll),
+    changes.onDidChange(updateAll),
     vscode.workspace.onDidOpenTextDocument(update),
     vscode.workspace.onDidCloseTextDocument((document) =>
       collection.delete(document.uri),

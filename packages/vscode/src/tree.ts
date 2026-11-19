@@ -4,11 +4,19 @@ import type { DataController } from './controller'
 import { groupByNamespace, type KeyGroup } from './core/namespaces'
 import { STATE_ICONS, stateFor, truncate, textFor } from './core/keys'
 import { filterByRelease, type ReleaseFilter } from './core/releases'
+import { buildLocalHoverInfo } from './core/hover'
 import { hoverInfoFor, hoverMarkdown } from './hover'
+import type { LocalChanges } from './localChanges'
+
+/** `local`: the texts of a key only the locale files have. */
+export interface KeyItem {
+  key: string
+  state?: DeliveryKeyState
+  local?: Readonly<Record<string, string>>
+}
 
 type Node =
-  | { type: 'group'; group: KeyGroup<DeliveryKeyState> }
-  | { type: 'key'; state: DeliveryKeyState }
+  { type: 'group'; group: KeyGroup<KeyItem> } | ({ type: 'key' } & KeyItem)
 
 class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
   readonly #emitter = new vscode.EventEmitter<void>()
@@ -16,7 +24,10 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
 
   filter: ReleaseFilter
 
-  constructor(private readonly controller: DataController) {}
+  constructor(
+    private readonly controller: DataController,
+    private readonly changes: LocalChanges,
+  ) {}
 
   refresh() {
     this.#emitter.fire()
@@ -26,8 +37,15 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
     const data = this.controller.data
     if (!data) return []
     if (!node) {
-      const keys = filterByRelease(data.keys, this.filter)
-      return groupByNamespace(keys, data.namespaces, data.keyPrefix).map(
+      const items: KeyItem[] = filterByRelease(data.keys, this.filter).map(
+        (state) => ({ key: state.key, state }),
+      )
+      if (this.filter === undefined || this.filter === 'unassigned') {
+        for (const [key, local] of this.changes.localOnly) {
+          if (!data.index.has(key)) items.push({ key, local })
+        }
+      }
+      return groupByNamespace(items, data.namespaces, data.keyPrefix).map(
         (group) => ({
           type: 'group',
           group,
@@ -35,7 +53,7 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
       )
     }
     if (node.type === 'group') {
-      return node.group.items.map((state) => ({ type: 'key', state }))
+      return node.group.items.map((item) => ({ type: 'key', ...item }))
     }
     return []
   }
@@ -54,11 +72,22 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
       return item
     }
     const data = this.controller.data
-    const { state } = node
-    const item = new vscode.TreeItem(state.key)
-    item.id = `key:${state.id}`
-    item.contextValue = 'key'
-    if (data) {
+    const { state, local, key } = node
+    const item = new vscode.TreeItem(key)
+    if (!state) {
+      item.id = `local:${key}`
+      item.contextValue = 'localKey'
+      item.iconPath = new vscode.ThemeIcon('cloud-upload')
+      const text = data && local?.[data.displayLocale]
+      item.description = text ? truncate(text, 60) : undefined
+      if (data && local) {
+        item.tooltip = hoverMarkdown(buildLocalHoverInfo(key, local, data))
+      }
+    } else {
+      item.id = `key:${state.id}`
+      item.contextValue = 'key'
+    }
+    if (state && data) {
       const text = textFor(state, data.displayLocale)
       item.description = text === undefined ? undefined : truncate(text, 60)
       item.iconPath = new vscode.ThemeIcon(
@@ -69,7 +98,7 @@ class KeyTreeProvider implements vscode.TreeDataProvider<Node> {
     item.command = {
       command: 'localness.findUsages',
       title: 'Find usages',
-      arguments: [state.key],
+      arguments: [key],
     }
     return item
   }
@@ -79,9 +108,10 @@ const FILTER_STATE = 'localness.keysReleaseFilter'
 
 export function registerTree(
   controller: DataController,
+  changes: LocalChanges,
   context: vscode.ExtensionContext,
 ): vscode.Disposable {
-  const provider = new KeyTreeProvider(controller)
+  const provider = new KeyTreeProvider(controller, changes)
   provider.filter = context.workspaceState.get<ReleaseFilter>(FILTER_STATE)
   const view = vscode.window.createTreeView('localness.keys', {
     treeDataProvider: provider,
@@ -128,6 +158,7 @@ export function registerTree(
   return vscode.Disposable.from(
     view,
     controller.onDidChange(sync),
+    changes.onDidChange(() => provider.refresh()),
     vscode.commands.registerCommand(
       'localness.filterKeysByRelease',
       pickFilter,

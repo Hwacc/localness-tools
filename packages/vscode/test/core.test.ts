@@ -4,6 +4,7 @@ import {
   type DeliveryMeta,
 } from '@localness/sdk'
 import { describe, expect, it } from 'vitest'
+import type { DiffKind } from '@localness/sdk/sync'
 import {
   buildProjectData,
   projectSetting,
@@ -14,6 +15,7 @@ import { localeIcon, localeName } from '../src/core/locales'
 import { filterByRelease, releaseChanges } from '../src/core/releases'
 import {
   buildHoverInfo,
+  buildLocalHoverInfo,
   escapeMarkdown,
   renderHoverMarkdown,
 } from '../src/core/hover'
@@ -24,6 +26,7 @@ import {
   hintOffset,
   hintText,
   isRevealed,
+  localOnlyTexts,
   publishedBehind,
   replaceKeyState,
   searchCached,
@@ -114,8 +117,8 @@ describe('key state helpers', () => {
   it('truncates and flattens hint text', () => {
     expect(truncate('a  b\nc', 10)).toBe('a b c')
     expect(truncate('abcdefghij', 5)).toBe('abcd…')
-    expect(hintText(bye, 'ja', 20)).toBe('(no translation)')
-    expect(hintText(welcome, 'ja', 20)).toBe('ようこそ')
+    expect(hintText(textFor(bye, 'ja'), 20)).toBe('(no translation)')
+    expect(hintText(textFor(welcome, 'ja'), 20)).toBe('ようこそ')
   })
 
   it('anchors hints after the closing quote', () => {
@@ -203,6 +206,17 @@ describe('hover', () => {
     expect(markdown).toContain('Unpublished changes')
     expect(markdown).toContain('> Hi\\!\n>\n> _Published:_ Hi')
     expect(markdown.match(/_Published:_/g)).toHaveLength(1)
+  })
+
+  it('renders a key only in the locale files without project links', () => {
+    const sections = renderHoverMarkdown(
+      buildLocalHoverInfo('app.new', { en: 'New', ja: '新しい' }, context),
+    ).split('\n\n---\n\n')
+    expect(sections[0]).not.toContain('Open in Localness')
+    expect(sections[0]).toContain('Only in the locale files')
+    expect(sections[0]).not.toContain('Releases')
+    expect(sections[1]).toMatch(/Not pushed/)
+    expect(sections[2]).toContain('> 新しい')
   })
 })
 describe('project data', () => {
@@ -343,5 +357,23 @@ describe('locales', () => {
     expect(localeIcon('es-419')).toBeUndefined()
     expect(localeIcon('is')).toBeUndefined()
     expect(localeIcon('not a locale')).toBeUndefined()
+  })
+})
+
+describe('localOnlyTexts', () => {
+  it('groups the texts of keys only the locale files add', () => {
+    const entry = (
+      key: string,
+      locale: string,
+      kind: DiffKind,
+      local: string | null,
+    ) => ({ key, locale, kind, local })
+    const texts = localOnlyTexts([
+      entry('home.new', 'en', 'local-added', 'New'),
+      entry('home.new', 'ja', 'local-added', '新しい'),
+      entry('home.gone', 'en', 'platform-deleted', 'Gone'),
+      entry('home.title', 'en', 'local-changed', 'Title'),
+    ])
+    expect([...texts]).toEqual([['home.new', { en: 'New', ja: '新しい' }]])
   })
 })

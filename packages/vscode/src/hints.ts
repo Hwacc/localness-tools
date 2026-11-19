@@ -7,6 +7,7 @@ import {
   textFor,
   truncate,
 } from './core/keys'
+import type { LocalChanges } from './localChanges'
 import type { DocumentKey, KeyMatcher } from './matcher'
 import {
   readSettings,
@@ -75,6 +76,7 @@ function revealCheck(
 export function registerInlineHints(
   controller: DataController,
   matcher: KeyMatcher,
+  changes: LocalChanges,
 ): vscode.Disposable {
   const hints = vscode.window.createTextEditorDecorationType({})
   const underline = vscode.window.createTextEditorDecorationType({
@@ -105,8 +107,11 @@ export function registerInlineHints(
     const hiddenRanges: vscode.Range[] = []
     for (const match of matcher.keysIn(document)) {
       const state = data.index.get(match.key)
-      if (!state) continue
-      const translation = textFor(state, data.displayLocale)
+      const local = state ? undefined : changes.localOnly.get(match.key)
+      if (!state && !local) continue
+      const translation = state
+        ? textFor(state, data.displayLocale)
+        : local![data.displayLocale]
       const replace =
         settings.inlineHints === 'replace' &&
         translation !== undefined &&
@@ -137,7 +142,7 @@ export function registerInlineHints(
         renderOptions: {
           after: inlineAttachment(
             settings.inlineHintStyle,
-            hintText(state, data.displayLocale, settings.inlineHintMaxLength),
+            hintText(translation, settings.inlineHintMaxLength),
           ),
         },
       })
@@ -156,6 +161,7 @@ export function registerInlineHints(
     underline,
     hidden,
     controller.onDidChange(updateVisible),
+    changes.onDidChange(updateVisible),
     vscode.window.onDidChangeVisibleTextEditors(updateVisible),
     vscode.window.onDidChangeTextEditorSelection((event) => {
       if (readSettings().inlineHints === 'replace') update(event.textEditor)

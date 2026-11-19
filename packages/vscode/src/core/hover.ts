@@ -15,7 +15,8 @@ export interface HoverLocale {
   text: string | undefined
   /** The published text while an unpublished edit differs from it. */
   published: string | undefined
-  state: DeliveryLocaleStateName
+  /** `local`: the key is only in the locale files. */
+  state: DeliveryLocaleStateName | 'local'
 }
 
 export interface HoverInfo {
@@ -24,7 +25,8 @@ export interface HoverInfo {
   locales: HoverLocale[]
   draft: boolean
   releases: string[]
-  url: string
+  /** Absent while the key is only in the locale files. */
+  url?: string
 }
 
 /** Links the editor adds; plain Markdown so the renderer stays testable. */
@@ -58,11 +60,32 @@ export function buildHoverInfo(
   }
 }
 
+export function buildLocalHoverInfo(
+  key: string,
+  texts: Readonly<Record<string, string>>,
+  context: Pick<HoverContext, 'sourceLocale' | 'displayLocale'>,
+): HoverInfo {
+  const locales = [...new Set([context.sourceLocale, context.displayLocale])]
+  return {
+    key,
+    locales: locales.map((locale) => ({
+      locale,
+      isSource: locale === context.sourceLocale,
+      text: texts[locale],
+      published: undefined,
+      state: 'local',
+    })),
+    draft: false,
+    releases: [],
+  }
+}
+
 export function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|<>~&]/g, '\\$&')
 }
 
-const STATE_BADGES: Record<DeliveryLocaleStateName, string> = {
+const STATE_BADGES: Record<HoverLocale['state'], string> = {
+  local: '$(cloud-upload) Not pushed',
   published: '$(pass) Published',
   draft: '$(edit) Edited',
   outdated: '$(warning) Outdated',
@@ -97,7 +120,9 @@ export function renderHoverMarkdown(
     [
       `$(key) **\`${info.key.replace(/`/g, "'")}\`**`,
       ...(links.title ?? []),
-      `[$(link-external)](${info.url} "Open in Localness")`,
+      ...(info.url
+        ? [`[$(link-external)](${info.url} "Open in Localness")`]
+        : []),
     ].join(' '),
   ]
   if (info.draft) title.push('$(circle-filled) Unpublished changes')
@@ -105,8 +130,11 @@ export function renderHoverMarkdown(
     info.releases.length > 0
       ? info.releases.map(escapeMarkdown).join(', ')
       : 'none'
+  const head = info.url
+    ? `${title.join('&nbsp;&nbsp;&nbsp;')}  \nReleases: ${releases}`
+    : `${title.join('&nbsp;&nbsp;&nbsp;')}  \nOnly in the locale files`
   return [
-    `${title.join('&nbsp;&nbsp;&nbsp;')}  \nReleases: ${releases}`,
+    head,
     ...info.locales.map((entry) => localeSection(entry, links.edit)),
     ...(links.footer?.length ? [links.footer.join(' · ')] : []),
   ].join('\n\n---\n\n')

@@ -142,6 +142,12 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "localness.sync.pushKey",
+        "title": "Push to Localness",
+        "category": "Localness",
+        "icon": "$(cloud-upload)"
+      },
+      {
         "command": "localness.openLocalFile",
         "title": "Open local file",
         "category": "Localness",
@@ -218,6 +224,10 @@
         },
         {
           "command": "localness.openLocalFile",
+          "when": "false"
+        },
+        {
+          "command": "localness.sync.pushKey",
           "when": "false"
         },
         {
@@ -325,7 +335,7 @@
         },
         {
           "command": "localness.findUsages",
-          "when": "view == localness.keys && viewItem == key",
+          "when": "view == localness.keys && viewItem =~ /^(key|localKey)$/",
           "group": "1_open@1"
         },
         {
@@ -340,7 +350,7 @@
         },
         {
           "command": "localness.copyKey",
-          "when": "view == localness.keys && viewItem == key",
+          "when": "view == localness.keys && viewItem =~ /^(key|localKey)$/",
           "group": "3_copy@1"
         },
         {
@@ -360,13 +370,23 @@
         },
         {
           "command": "localness.openLocalFile",
-          "when": "view == localness.keys && viewItem == key && localness.hasLocaleFiles",
+          "when": "view == localness.keys && viewItem =~ /^(key|localKey)$/ && localness.hasLocaleFiles",
           "group": "inline@1"
         },
         {
           "command": "localness.openLocalFile",
-          "when": "view == localness.keys && viewItem == key && localness.hasLocaleFiles",
+          "when": "view == localness.keys && viewItem =~ /^(key|localKey)$/ && localness.hasLocaleFiles",
           "group": "1_open@2"
+        },
+        {
+          "command": "localness.sync.pushKey",
+          "when": "view == localness.keys && viewItem == localKey",
+          "group": "inline@2"
+        },
+        {
+          "command": "localness.sync.pushKey",
+          "when": "view == localness.keys && viewItem == localKey",
+          "group": "2_edit@1"
         },
         {
           "command": "localness.editReleases",
