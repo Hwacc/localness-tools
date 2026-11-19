@@ -3,6 +3,15 @@
   "displayName": "Localness",
   "description": "Hover, inline hints, diagnostics and a key browser for Localness translation keys.",
   "version": "0.1.0",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "keywords": [
+    "i18n",
+    "localization",
+    "translation",
+    "locale",
+    "localness"
+  ],
   "private": true,
   "publisher": "localness",
   "type": "module",
@@ -532,12 +541,15 @@
   },
   "scripts": {
     "build": "tsdown",
+    "package": "tsdown && vsce package --no-dependencies",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@localness/sdk": "workspace:*",
     "@types/vscode": "~1.90.0",
-    "flag-icons": "^7.6.0"
+    "@vscode/vsce": "^4.1.1",
+    "flag-icons": "^7.6.0",
+    "ovsx": "^1.4.0"
   }
 }

@@ -39,3 +39,5 @@ See [`packages/sdk`](packages/sdk/README.md) for usage.
 | Manual (no tag) | Every public package whose current `version` is not yet on npm |
 
 A `cli` release pins the SDK `version` of the tagged commit: release `sdk` first, and tag `cli` after its version commit, when the CLI needs a new SDK.
+
+The VS Code extension is published to the VS Code Marketplace and Open VSX by [`.github/workflows/release-vscode.yml`](.github/workflows/release-vscode.yml) when a `vscode@x.y.z` tag is pushed, with the same version handling; run it manually to retry a failed store. It publishes to the Marketplace through Trusted Publishing (a policy for this repository and `release-vscode.yml` on the `localness` publisher) and publishes to Open VSX only when the `OPENVSX_ENABLED` repository variable is `true` (the first version needs the `OVSX_PAT` secret; later ones can use Open VSX Trusted Publishing). `pnpm --filter localness-vscode package` builds a `.vsix` locally.

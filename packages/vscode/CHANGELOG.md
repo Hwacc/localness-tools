@@ -1,5 +1,5 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
-- Initial read-only release: hover, inline hints, diagnostics, key tree, search, status bar.
+- Initial release: hover, inline hints, diagnostics, key tree, search, status bar, translation editing, text extraction and locale file sync.
