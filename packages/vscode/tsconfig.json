@@ -5,7 +5,8 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@localness/sdk": ["../sdk/src/index.ts"],
-      "@localness/sdk/sync": ["../sdk/src/sync/index.ts"]
+      "@localness/sdk/sync": ["../sdk/src/sync/index.ts"],
+      "@localness/sdk/review": ["../sdk/src/review/index.ts"]
     }
   },
   "include": ["src", "test", "tsdown.config.ts", "vitest.config.ts"]

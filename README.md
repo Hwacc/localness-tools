@@ -29,12 +29,13 @@ See [`packages/sdk`](packages/sdk/README.md) for usage.
 
 ## Releasing
 
-`@localness/sdk` and `@localness/cli` are published to npm by [`.github/workflows/release.yml`](.github/workflows/release.yml) through npm trusted publishing. Bump the package `version`, commit, then push a tag:
+`@localness/sdk` and `@localness/cli` are published to npm by [`.github/workflows/release.yml`](.github/workflows/release.yml) through npm trusted publishing. Push a tag; the workflow sets the `version` from it, publishes, then commits the new `version` to `main`:
 
-| Tag            | Publishes                                               |
-| -------------- | ------------------------------------------------------- |
-| `sdk@x.y.z`    | `@localness/sdk` only; the tag must match its `version` |
-| `cli@x.y.z`    | `@localness/cli` only; the tag must match its `version` |
-| `v*` or manual | Every public package whose `version` is not yet on npm  |
+| Tag             | Publishes                                                      |
+| --------------- | -------------------------------------------------------------- |
+| `sdk@x.y.z`     | `@localness/sdk` at `x.y.z`                                    |
+| `cli@x.y.z`     | `@localness/cli` at `x.y.z`                                    |
+| `vx.y.z`        | Both at `x.y.z`                                                |
+| Manual (no tag) | Every public package whose current `version` is not yet on npm |
 
-Publish `sdk` before a `cli` release that depends on a new SDK version.
+A `cli` release pins the SDK `version` of the tagged commit: release `sdk` first, and tag `cli` after its version commit, when the CLI needs a new SDK.
