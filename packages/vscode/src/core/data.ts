@@ -1,5 +1,6 @@
 import {
   findRelease,
+  type DeliveryKeyConvention,
   type DeliveryKeyState,
   type DeliveryMeta,
   type DeliveryProjectRef,
@@ -48,6 +49,8 @@ export interface ProjectData {
   namespaces: string[]
   /** Namespace names are relative to it. */
   keyPrefix: string
+  /** Null when the server predates it. */
+  keyConvention: DeliveryKeyConvention | null
   releaseNames: Map<number, string>
   /** In the platform's order. */
   releases: ProjectRelease[]
@@ -79,6 +82,7 @@ export function buildProjectData(
     locales: locales.available,
     namespaces: (meta.namespaces ?? []).map((namespace) => namespace.name),
     keyPrefix: meta.keyConvention?.prefix ?? '',
+    keyConvention: meta.keyConvention ?? null,
     releaseNames: new Map(
       meta.releases.map((release) => [Number(release.id), release.name]),
     ),

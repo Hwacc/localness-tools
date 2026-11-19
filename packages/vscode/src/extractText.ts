@@ -1,10 +1,19 @@
 import * as vscode from 'vscode'
 import {
   LocalnessError,
+  checkI18nKey,
+  keyViolationErrors,
+  keyViolationWarnings,
   type CaptureMatch,
+  type DeliveryKeyConvention,
   type DeliveryKeyState,
   type LocalnessClient,
 } from '@localness/sdk'
+import {
+  describeViolations,
+  matchLocalEntries,
+  readLocalFiles,
+} from '@localness/sdk/sync'
 import type { DataController } from './controller'
 import {
   locateExtraction,
@@ -22,7 +31,9 @@ import { releaseForNewKeys } from './releases'
 const COMMAND = 'localness.extractText'
 const UNNAMED_PREFIX = '__unnamed_'
 
-type KeyHit = CaptureMatch['matches'][number]['keys'][number]
+type KeyHit =
+  | (CaptureMatch['matches'][number]['keys'][number] & { local?: false })
+  | { key: string; sourceText: string; local: true }
 
 function showError(error: unknown, baseUrl: string) {
   void vscode.window.showErrorMessage(
@@ -46,7 +57,11 @@ async function pickExisting(hits: readonly KeyHit[]) {
     [
       ...hits.map((hit) => ({
         label: `$(link) ${hit.key}`,
-        description: hit.draft ? 'draft' : '',
+        description: hit.local
+          ? 'local file, not pushed yet'
+          : hit.draft
+            ? 'draft'
+            : '',
         detail: truncate(hit.sourceText, 120),
         hit,
       })),
@@ -57,17 +72,46 @@ async function pickExisting(hits: readonly KeyHit[]) {
   return picked?.hit
 }
 
-function validateName(value: string) {
+/** Why the name cannot be used, `''` when it can. */
+function validateName(value: string, convention: DeliveryKeyConvention | null) {
   const name = value.trim()
   if (/[\s'"`]/.test(name)) return 'Key names cannot contain spaces or quotes.'
   if (name.startsWith(UNNAMED_PREFIX)) {
     return `${UNNAMED_PREFIX} is reserved for unnamed keys.`
   }
-  return ''
+  if (!name || !convention) return ''
+  const errors = keyViolationErrors(checkI18nKey(name, convention))
+  return errors.length > 0
+    ? `Breaks the project's key convention: ${describeViolations(errors)}.`
+    : ''
+}
+
+function nameMessage(
+  value: string,
+  convention: DeliveryKeyConvention | null,
+): string | vscode.InputBoxValidationMessage | undefined {
+  const error = validateName(value, convention)
+  if (error) return error
+  const name = value.trim()
+  const warnings =
+    name && convention
+      ? keyViolationWarnings(checkI18nKey(name, convention))
+      : []
+  return warnings.length > 0
+    ? {
+        message: `Off the suggested key style: ${describeViolations(warnings)}.`,
+        severity: vscode.InputBoxValidationSeverity.Warning,
+      }
+    : undefined
 }
 
 /** The typed name, `''` for an unnamed draft, undefined when cancelled. */
-function askName(client: LocalnessClient, text: string, value = '') {
+function askName(
+  client: LocalnessClient,
+  convention: DeliveryKeyConvention | null,
+  text: string,
+  value = '',
+) {
   const input = vscode.window.createInputBox()
   const suggest = {
     iconPath: new vscode.ThemeIcon('sparkle'),
@@ -85,7 +129,7 @@ function askName(client: LocalnessClient, text: string, value = '') {
   return new Promise<string | undefined>((resolve) => {
     let result: string | undefined
     input.onDidChangeValue((next) => {
-      input.validationMessage = validateName(next) || undefined
+      input.validationMessage = nameMessage(next, convention)
     })
     input.onDidTriggerButton(async () => {
       input.busy = true
@@ -94,7 +138,7 @@ function askName(client: LocalnessClient, text: string, value = '') {
         const suggestion = await client.suggestKeyName(text)
         if (suggestion.key) {
           input.value = suggestion.key
-          input.validationMessage = validateName(suggestion.key) || undefined
+          input.validationMessage = nameMessage(suggestion.key, convention)
         }
         const others = (suggestion.alternatives ?? [])
           .map((alternative) => alternative.key)
@@ -115,7 +159,7 @@ function askName(client: LocalnessClient, text: string, value = '') {
       }
     })
     input.onDidAccept(() => {
-      if (validateName(input.value)) return
+      if (validateName(input.value, convention)) return
       result = input.value.trim()
       input.hide()
     })
@@ -138,12 +182,13 @@ interface ChosenKey {
 /** Names and creates the key, offering the existing key on a name clash. */
 async function createNamedKey(
   client: LocalnessClient,
+  convention: DeliveryKeyConvention | null,
   text: string,
   releaseId: number | undefined,
 ): Promise<ChosenKey | undefined> {
   let name = ''
   for (;;) {
-    const typed = await askName(client, text, name)
+    const typed = await askName(client, convention, text, name)
     if (typed === undefined) return undefined
     name = typed
     try {
@@ -175,6 +220,23 @@ async function createNamedKey(
       if (choice !== 'Rename') return undefined
     }
   }
+}
+
+/** Keys only the source-locale file has, so the same text does not get a second key. */
+async function localHits(
+  controller: DataController,
+  sourceLocale: string,
+  text: string,
+  known: readonly KeyHit[],
+): Promise<KeyHit[]> {
+  const loaded = controller.config
+  if (!loaded?.config.files) return []
+  const [file] = await readLocalFiles(loaded, [sourceLocale]).catch(() => [])
+  const entries = file?.content.entries ?? {}
+  const seen = new Set(known.map((hit) => hit.key))
+  return matchLocalEntries(entries, [text])[0]!
+    .filter((key) => !seen.has(key))
+    .map((key) => ({ key, sourceText: entries[key]!, local: true }))
 }
 
 async function loadState(
@@ -282,7 +344,11 @@ export async function extractText(
       },
       () => client.match([site.text]),
     )
-    hits = matches[0]?.keys ?? []
+    const platform = matches[0]?.keys ?? []
+    hits = [
+      ...platform,
+      ...(await localHits(controller, data.sourceLocale, site.text, platform)),
+    ]
   } catch (error) {
     showError(error, client.baseUrl)
     return
@@ -292,12 +358,25 @@ export async function extractText(
   if (hits.length > 0) {
     const hit = await pickExisting(hits)
     if (hit === undefined) return
+    if (hit?.local) {
+      // Not on the project yet: nothing to load or pull; push sends it.
+      const templates = mergeExtractTemplates(
+        controller.config?.config.extractTemplates,
+      )
+      await replaceSite(templates, document, version, site, hit.key)
+      return
+    }
     if (hit) chosen = { key: hit.key, reused: true }
   }
   if (!chosen) {
     const release = releaseForNewKeys(controller)
     if (release === undefined) return
-    chosen = await createNamedKey(client, site.text, release?.id)
+    chosen = await createNamedKey(
+      client,
+      data.keyConvention,
+      site.text,
+      release?.id,
+    )
   }
   if (!chosen) return
 

@@ -18,7 +18,7 @@ export type {
 } from './config'
 export { resolveRelease } from './release'
 export type { ReleaseRef } from './release'
-export { readLocalFiles } from './local'
+export { matchLocalEntries, readLocalFiles } from './local'
 export type { LocalLocaleFile } from './local'
 export { fetchPlatformTexts, platformTextOf } from './platform'
 export type { FetchPlatformTextsOptions, PlatformTexts } from './platform'
@@ -46,6 +46,7 @@ export {
   applyPush,
   checkPlan,
   describeBlocked,
+  describeViolations,
   planPush,
   recordPush,
 } from './push'

@@ -9,6 +9,7 @@ import { runMatch } from './lookup'
 import { runPull } from './pull'
 import { runPush } from './push'
 import { runReleases } from './releases'
+import { runReview } from './review'
 import { EXIT_ERROR, OPTIONS, type CliIo } from './shared'
 import { runSkill, warnOutdatedSkill } from './skill'
 import { runSuggestName } from './suggest-name'
@@ -29,6 +30,10 @@ Commands:
   sync                 pull the project's changes, then plan a push of local ones
   match <text...>      Existing keys whose source text equals each text
   suggest-name <text>  Ask the project's AI for a key name; writes nothing
+  review start <file>  Open a browser page to decide, per extracted text, which
+                       key it gets (reuse, new or skip)
+  review wait <id>     Print the decisions once approved (JSON; "pending" after
+                       --timeout)
   releases [use|create|add|remove]
                        List releases, pick the one new keys get, create one,
                        or label existing keys
@@ -59,6 +64,7 @@ Options:
   --none               No release for new keys (releases use)
   --use                Also use the release created (releases create)
   --match <glob>       Keys to label, e.g. "checkout.*" (releases add/remove)
+  --timeout <seconds>  How long review wait waits (default 90)
   -y, --yes            Skip the confirmation of --match
   -h, --help           Show this help
   -v, --version        Show the version
@@ -113,6 +119,9 @@ export async function run(argv: string[], io: CliIo): Promise<number> {
     }
     if (command === 'releases') {
       return await runReleases(io, values, rest)
+    }
+    if (command === 'review') {
+      return await runReview(io, values, rest)
     }
     const allowed = command === 'apply' || command === 'skill' ? 1 : 0
     if (rest.length > allowed) {

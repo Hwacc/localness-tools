@@ -245,7 +245,11 @@ describe('locale file sync', () => {
     const loaded = await setup()
     await writeFile(
       join(root, 'locales', 'en.json'),
-      JSON.stringify({ old: 'Old!', web: { ok: 'Ok' }, Bad: 'Bad' }),
+      JSON.stringify({
+        old: 'Old!',
+        web: { ok: 'Ok', Shipping_address: 'Ship' },
+        Bad: 'Bad',
+      }),
     )
     await writeFile(
       join(root, 'locales', 'ja.json'),
@@ -267,6 +271,7 @@ describe('locale file sync', () => {
     const plan = planPush(loaded, comparison, { kinds: FORCED_PUSH_KINDS })
     expect(plan.keys.map((item) => [item.key, Boolean(item.create)])).toEqual([
       ['old', false],
+      ['web.Shipping_address', true],
       ['web.ok', true],
     ])
     expect(plan.blocked).toEqual([
@@ -274,8 +279,11 @@ describe('locale file sync', () => {
         locale: 'en',
         key: 'Bad',
         reason: 'key-name',
-        violations: ['prefix', 'case'],
+        violations: ['prefix'],
       },
+    ])
+    expect(plan.warnings).toEqual([
+      { key: 'web.Shipping_address', violations: ['case'] },
     ])
     expect(describeBlocked(plan.blocked[0]!, 'en')).toMatch(/key convention/)
   })

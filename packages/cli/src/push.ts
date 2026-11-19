@@ -4,6 +4,7 @@ import {
   PUSH_KINDS,
   compareLocaleFiles,
   describeBlocked,
+  describeViolations,
   planPush,
   prunePlans,
   resolveRelease,
@@ -60,6 +61,7 @@ export function pushJson({ plan, path, leftOut }: PlannedPush) {
     release: plan.release?.name ?? null,
     keys: plan.keys,
     blocked: plan.blocked,
+    warnings: plan.warnings,
     leftOut: leftOut.map(({ locale, key, kind }) => ({ locale, key, kind })),
   }
 }
@@ -94,6 +96,12 @@ export function describePush(io: CliIo, planned: PlannedPush, dryRun: boolean) {
       io.stdout(
         `  ${item.key} (${item.locale}): ${describeBlocked(item, plan.sourceLocale)}\n`,
       )
+    }
+  }
+  if (plan.warnings.length > 0) {
+    io.stdout('Created, but off the suggested key style:\n')
+    for (const item of plan.warnings) {
+      io.stdout(`  ${item.key}: ${describeViolations(item.violations)}\n`)
     }
   }
   if (leftOut.length > 0) {

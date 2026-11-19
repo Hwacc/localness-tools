@@ -27,7 +27,13 @@ export type {
 } from './cache'
 export * from './schemas'
 export {
+  KEY_VIOLATION_LEVEL,
+  KEY_VIOLATION_TEXT,
   NAMESPACE_BOUNDARY,
+  checkI18nKey,
+  keyViolationErrors,
+  keyViolationWarnings,
   namespaceOf,
   stripProjectPrefix,
 } from '@localness/contract/rules'
+export type { KeyViolation } from '@localness/contract/rules'

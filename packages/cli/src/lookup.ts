@@ -1,29 +1,25 @@
 import type { CaptureMatch } from '@localness/sdk'
-import { readLocalFiles } from '@localness/sdk/sync'
+import { matchLocalEntries, readLocalFiles } from '@localness/sdk/sync'
 import { loadProject, type CliIo, type CliValues } from './shared'
 
 // The server's per-request cap on texts.
 const BATCH = 500
 
 type PlatformHit = CaptureMatch['matches'][number]['keys'][number]
-type MatchHit =
+export type MatchHit =
   | (PlatformHit & { source: 'platform' })
   | { key: string; sourceText: string; source: 'local' }
 
-// Same rule the server matches by, so local and platform hits agree.
-const normalize = (text: string) => text.replace(/\s+/g, ' ').trim()
-
 /**
- * Which existing keys hold each text; writes nothing. Keys only in the
- * source-locale file (not pushed yet) count too, so extraction does not mint
- * a second key for the same text. JSON output adds what naming a new key
- * needs: the project's key convention and namespaces.
+ * Which existing keys hold each text. Keys only in the source-locale file (not
+ * pushed yet) count too, so extraction does not mint a second key for the
+ * same text.
  */
-export async function runMatch(io: CliIo, values: CliValues, texts: string[]) {
-  const wanted = texts.filter((text) => text.trim())
-  if (wanted.length === 0) {
-    throw new Error('Usage: localness match "<text>" ["<text>" ...]')
-  }
+export async function lookupTexts(
+  io: CliIo,
+  values: CliValues,
+  wanted: string[],
+) {
   const { client, loaded } = await loadProject(io, values)
   const platform: CaptureMatch['matches'] = []
   for (let start = 0; start < wanted.length; start += BATCH) {
@@ -35,25 +31,34 @@ export async function runMatch(io: CliIo, values: CliValues, texts: string[]) {
     loaded.config.files && meta.sourceLocale
       ? await readLocalFiles(loaded, [meta.sourceLocale])
       : []
-  const localByText = new Map<string, string[]>()
-  for (const [key, text] of Object.entries(local?.content.entries ?? {})) {
-    const normalized = normalize(text)
-    if (!normalized) continue
-    localByText.set(normalized, [...(localByText.get(normalized) ?? []), key])
-  }
-  const matches = platform.map(({ text, keys }) => {
+  const entries = local?.content.entries ?? {}
+  const localKeys = matchLocalEntries(
+    entries,
+    platform.map((match) => match.text),
+  )
+  const matches = platform.map(({ text, keys }, index) => {
     const known = new Set(keys.map((hit) => hit.key))
     const hits: MatchHit[] = keys.map((hit) => ({ ...hit, source: 'platform' }))
-    for (const key of localByText.get(normalize(text)) ?? []) {
-      if (known.has(key)) continue
-      hits.push({
-        key,
-        sourceText: local!.content.entries[key]!,
-        source: 'local',
-      })
+    for (const key of localKeys[index]!) {
+      if (!known.has(key)) {
+        hits.push({ key, sourceText: entries[key]!, source: 'local' })
+      }
     }
     return { text, keys: hits }
   })
+  return { client, loaded, meta, entries, matches }
+}
+
+/**
+ * Prints {@link lookupTexts}; writes nothing. JSON output adds what naming a
+ * new key needs: the project's key convention and namespaces.
+ */
+export async function runMatch(io: CliIo, values: CliValues, texts: string[]) {
+  const wanted = texts.filter((text) => text.trim())
+  if (wanted.length === 0) {
+    throw new Error('Usage: localness match "<text>" ["<text>" ...]')
+  }
+  const { meta, matches } = await lookupTexts(io, values, wanted)
   if (values.json) {
     const result = {
       matches,

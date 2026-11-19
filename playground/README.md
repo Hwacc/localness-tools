@@ -45,18 +45,21 @@ The table holds while the project still has the seed text; edits made on the pla
 | `Order summary`, `Coupon`, `Place order`, `Display name`, `Profile updated.` and the rest | new keys following the project convention |
 | `console` text, `className`, `data-testid`, URLs, track event names, existing `t()` calls | left alone |
 
-`localness match --json "Sign in"` prints `matches`, the project `convention` and declared `namespaces`. Keys only in `en.json` count too, marked `local`: `localness match "Place order"` finds `checkout_place_order` before it is pushed. `Shipping address` finds `checkout_ShippingAddress`, which breaks the convention, so the agent should flag it.
+`localness match --json "Sign in"` prints `matches`, the project `convention` and declared `namespaces`. Keys only in `en.json` count too, marked `local`: `localness match "Place order"` finds `checkout_place_order` before it is pushed. `Shipping address` finds `checkout_ShippingAddress`, which is off the suggested casing, so the agent should mention it.
 
-The five `checkout*` keys in `en.json` exercise name validation for new keys. `localness push --dry-run` creates `checkout_place_order` and blocks the others (with `_` separator, snake_case, depth 4):
+The agent then opens the review page (`localness review start`): one row per text with reuse / new key / skip, live name checks, and `Approve`. Typing `checkout__close` as a new name shows a red convention error that blocks `Approve`; picking the local `checkout.apply_coupon` or typing `checkout_ShippingAddress` shows a yellow warning only. To try the page without an agent, write `{ "items": [{ "text": "Coupon", "file": "src/extract/CheckoutSummary.tsx", "line": 20, "key": "checkout_coupon" }] }` to `.localness/review-input.json`, run `node ../packages/cli/dist/cli.mjs review start .localness/review-input.json`, approve, then `... review wait <id>`.
 
-| Key | Reason |
+The five `checkout*` keys in `en.json` exercise name validation for new keys. Prefix, charset and empty segments are errors that block a new key; separator, casing and depth are suggestions that only warn, so legacy names still push. `localness push --dry-run` (with `_` separator, snake_case, depth 4):
+
+| Key | Result |
 | --- | --- |
-| `checkout.apply_coupon` | `charset`, `case` |
-| `checkout_ShippingAddress` | `case` |
-| `checkout__close` | `segment` |
-| `checkout_summary_free_shipping_note` | `depth` |
+| `checkout_place_order` | created |
+| `checkout.apply_coupon` | created, warns `separator` |
+| `checkout_ShippingAddress` | created, warns `case` |
+| `checkout_summary_free_shipping_note` | created, warns `depth` |
+| `checkout__close` | blocked, `segment` |
 
-The VS Code Sync view lists the same blocked keys in the push confirmation. Existing keys are never checked, so the seed's `.` keys pass.
+The VS Code Sync view shows the same blocked keys and warnings in the push confirmation. Existing keys are never checked, so the seed's `.` keys pass.
 
 To test a key prefix, set one in the platform project settings (e.g. `web`) and declare namespaces (`auth`, `cart`, `settings`, `checkout`), then **Localness: Refresh**. Namespaces are relative to the prefix, so unprefixed seed keys stay ungrouped, and every new key without `web_` is blocked with `prefix`.
 

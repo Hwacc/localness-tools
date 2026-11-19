@@ -1,10 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import {
-  KEY_VIOLATION_TEXT,
-  type KeyViolation,
-} from '@localness/contract/rules'
+import { KEY_VIOLATION_VALUES } from '@localness/contract/rules'
 import { z } from 'zod'
 import { SYNC_CONTENTS, type LoadedConfig } from './config'
 
@@ -71,18 +68,18 @@ export const pushPlanSchema = originSchema.extend({
       key: z.string(),
       reason: z.enum(PUSH_BLOCK_REASONS),
       /** For `key-name`: how a new key's name breaks the project's key convention. */
-      violations: z
-        .array(
-          z.enum(
-            Object.keys(KEY_VIOLATION_TEXT) as [
-              KeyViolation,
-              ...KeyViolation[],
-            ],
-          ),
-        )
-        .optional(),
+      violations: z.array(z.enum(KEY_VIOLATION_VALUES)).optional(),
     }),
   ),
+  /** New keys that are created but differ from the convention's suggestions. */
+  warnings: z
+    .array(
+      z.object({
+        key: z.string(),
+        violations: z.array(z.enum(KEY_VIOLATION_VALUES)),
+      }),
+    )
+    .default([]),
 })
 
 export type PushPlan = z.output<typeof pushPlanSchema>

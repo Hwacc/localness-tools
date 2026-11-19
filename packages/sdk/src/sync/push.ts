@@ -3,6 +3,9 @@ import {
   KEY_VIOLATION_TEXT,
   checkI18nKey,
   isUnnamedKey,
+  keyViolationErrors,
+  keyViolationWarnings,
+  type KeyViolation,
 } from '@localness/contract/rules'
 import type { LocalnessClient } from '../client'
 import { LocalnessError } from '../errors'
@@ -44,7 +47,8 @@ export interface PlanPushOptions {
  * A key the project lacks is created from the source locale file's text, which
  * the project publishes; every other text becomes a draft that waits for a
  * publish in the web app. A new key whose name breaks the project's key
- * convention is blocked, not created. Throws past `MAX_PLAN_KEYS` keys.
+ * convention is blocked, not created; one that only differs from its suggested
+ * style is created and listed in `warnings`. Throws past `MAX_PLAN_KEYS` keys.
  */
 export function planPush(
   loaded: LoadedConfig,
@@ -55,6 +59,7 @@ export function planPush(
   const source = comparison.sourceLocale
   const keys = new Map<string, PushKey>()
   const blocked: PushBlocked[] = []
+  const warnings: PushPlan['warnings'] = []
   const block = (entry: DiffEntry, reason: PushBlocked['reason']) =>
     blocked.push({ locale: entry.locale, key: entry.key, reason })
   const convention = comparison.platform.keyConvention
@@ -71,7 +76,8 @@ export function planPush(
       let create: PushKey['create'] = null
       if (!entry.onPlatform) {
         if (misnamed.has(entry.key)) continue
-        const violations = convention ? checkI18nKey(entry.key, convention) : []
+        const all = convention ? checkI18nKey(entry.key, convention) : []
+        const violations = keyViolationErrors(all)
         if (violations.length > 0) {
           misnamed.add(entry.key)
           blocked.push({
@@ -88,6 +94,10 @@ export function planPush(
           continue
         }
         create = { sourceText }
+        const advice = keyViolationWarnings(all)
+        if (advice.length > 0) {
+          warnings.push({ key: entry.key, violations: advice })
+        }
       }
       item = { key: entry.key, create, locales: {} }
       keys.set(entry.key, item)
@@ -116,6 +126,7 @@ export function planPush(
     release: options.release ?? null,
     keys: [...keys.values()],
     blocked,
+    warnings,
   }
 }
 
@@ -127,10 +138,14 @@ export function describeBlocked(item: PushBlocked, sourceLocale: string) {
     case 'reserved-name':
       return '__unnamed_ names are reserved for unnamed drafts'
     case 'key-name':
-      return `breaks the project's key convention: ${(item.violations ?? [])
-        .map((violation) => KEY_VIOLATION_TEXT[violation].toLowerCase())
-        .join('; ')}`
+      return `breaks the project's key convention: ${describeViolations(item.violations ?? [])}`
   }
+}
+
+export function describeViolations(violations: KeyViolation[]) {
+  return violations
+    .map((violation) => KEY_VIOLATION_TEXT[violation].toLowerCase())
+    .join('; ')
 }
 
 export interface PlanCheck {

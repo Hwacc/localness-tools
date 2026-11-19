@@ -53,3 +53,20 @@ export async function readLocalFiles(
     }),
   )
 }
+
+// The server's `/match` rule: layout whitespace is not wording.
+const matchText = (text: string) => text.replace(/\s+/g, ' ').trim()
+
+/** Per text, the keys in `entries` holding it, matched the way `/match` matches. */
+export function matchLocalEntries(
+  entries: Record<string, string>,
+  texts: readonly string[],
+): string[][] {
+  const byText = new Map<string, string[]>()
+  for (const [key, text] of Object.entries(entries)) {
+    const normalized = matchText(text)
+    if (!normalized) continue
+    byText.set(normalized, [...(byText.get(normalized) ?? []), key])
+  }
+  return texts.map((text) => byText.get(matchText(text)) ?? [])
+}

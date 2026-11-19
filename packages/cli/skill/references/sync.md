@@ -5,7 +5,7 @@
 3. Ask the person about those keys and wait for the answer.
 4. Bring the project's text in: `localness pull`, or `localness pull --keys <a,b>` for keys the person gave to the project.
 5. Plan local changes: `localness push --json`, or `localness push --keys <a,b> --json` for keys the person gave to the local side. It writes nothing to the project.
-6. Show the plan to the person: its id, and for each key whether it is created or updated and every locale's old → new text. Also show `blocked` and `leftOut`.
+6. Show the plan to the person: its id, and for each key whether it is created or updated and every locale's old → new text. Also show `blocked`, `warnings` and `leftOut`.
 7. Only after the person approves, run `localness apply <id>`. If it reports the plan stale or expired, nothing was written: run `diff` again and start over; never retry the same id.
 8. Report what was written, and that drafts wait for a publish in the web app.
 
@@ -27,6 +27,6 @@ When `hasBase` is false (the first sync), every changed text is `different`. Say
 
 ## New keys
 
-- Name a new key after the project's key convention (`localness match --json` prints it as `convention`) and the neighbouring keys in the same file. `push` blocks a new key whose name breaks the convention, with reason `key-name`: rename it in the locale file and the code, then plan again. `localness suggest-name "<source text>"` asks the project's AI for one name, but it is slow, uses the project's AI quota and needs a read & write token: only use it for a few strings a person asked about. Names starting with `__unnamed_` are reserved.
+- Name a new key after the project's key convention (`localness match --json` prints it as `convention`) and the neighbouring keys in the same file. `push` blocks a new key whose name breaks a strict rule (prefix, characters, empty segment), with reason `key-name`: rename it in the locale file and the code, then plan again. New keys off the suggested separator, casing or depth are created and listed in `warnings`; mention them, but they need no rename. `localness suggest-name "<source text>"` asks the project's AI for one name, but it is slow, uses the project's AI quota and needs a read & write token: only use it for a few strings a person asked about. Names starting with `__unnamed_` are reserved.
 - A new key needs its text in the source-locale file. `apply` creates the key and publishes that source text; text in other locales becomes drafts.
 - A plan holds at most 200 keys and expires after an hour.

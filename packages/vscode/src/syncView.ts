@@ -9,6 +9,7 @@ import {
   checkPlan,
   compareLocaleFiles,
   describeBlocked,
+  describeViolations,
   planPush,
   pullLocaleFiles,
   readBase,
@@ -387,6 +388,13 @@ export function registerSyncView(
           ? `\n${replaced.length} of these replace text changed in the project.`
           : '',
         blocked.length > 0 ? `\nLeft out: ${blocked.join('; ')}` : '',
+        plan.warnings.length > 0
+          ? `\nOff the suggested key style: ${plan.warnings
+              .map(
+                (one) => `${one.key} (${describeViolations(one.violations)})`,
+              )
+              .join('; ')}`
+          : '',
         plan.release ? `\nNew keys are labelled ${plan.release.name}.` : '',
         '\nDrafts reach the bundle once published in Localness.',
       ]
