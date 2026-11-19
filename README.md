@@ -26,3 +26,15 @@ pnpm lint       # oxlint + prettier --check
 ```
 
 See [`packages/sdk`](packages/sdk/README.md) for usage.
+
+## Releasing
+
+`@localness/sdk` and `@localness/cli` are published to npm by [`.github/workflows/release.yml`](.github/workflows/release.yml) through npm trusted publishing. Bump the package `version`, commit, then push a tag:
+
+| Tag            | Publishes                                               |
+| -------------- | ------------------------------------------------------- |
+| `sdk@x.y.z`    | `@localness/sdk` only; the tag must match its `version` |
+| `cli@x.y.z`    | `@localness/cli` only; the tag must match its `version` |
+| `v*` or manual | Every public package whose `version` is not yet on npm  |
+
+Publish `sdk` before a `cli` release that depends on a new SDK version.

@@ -5,8 +5,11 @@ Compares and syncs a repository's locale JSON files with a Localness project. Fo
 ## Install
 
 ```sh
-pnpm add -D @localness/cli
+pnpm add -g @localness/cli   # or: npm install -g @localness/cli
+localness --help
 ```
+
+A global install puts `localness` on your PATH, which the examples below, the VS Code extension's default `localness.cliCommand` and the Agent Skill expect. To pin a version per repository instead, add it as a dev dependency (`pnpm add -D @localness/cli`) and run it through `pnpm exec localness` or `npx localness`; to try it without installing, `npx @localness/cli diff`.
 
 Node 18.3 or later. The token is `LOCALNESS_TOKEN`, read from `.env.local` next to `localness.config.json` first and from the environment otherwise. A read token is enough for `init`, `diff`, `pull`, `push` and `sync`; `apply` and `suggest-name` need a Read & write token. The CLI never uses the VS Code extension's sign-in, and the extension never reads this token: give the CLI (and agents running it) its own token, Read only unless it has to write.
 

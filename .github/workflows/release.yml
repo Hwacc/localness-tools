@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'sdk@*'
+      - 'cli@*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target package
+        id: target
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag && "$REF_NAME" == *@* ]]; then
+            pkg="${REF_NAME%@*}"
+            version="${REF_NAME#*@}"
+            actual=$(node -p "require('./packages/$pkg/package.json').version")
+            if [[ "$actual" != "$version" ]]; then
+              echo "::error::Tag $REF_NAME does not match packages/$pkg version $actual"
+              exit 1
+            fi
+            echo "filter=./packages/$pkg" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; pnpm publish delegates to the npm CLI.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+
+      # Without a package tag, pnpm skips private packages and versions already on npm.
+      - name: Publish
+        env:
+          FILTER: ${{ steps.target.outputs.filter }}
+        run: |
+          if [[ -n "$FILTER" ]]; then
+            pnpm --filter "$FILTER" publish --access public --no-git-checks
+          else
+            pnpm -r publish --access public --no-git-checks
+          fi
