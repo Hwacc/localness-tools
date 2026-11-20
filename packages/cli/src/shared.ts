@@ -15,7 +15,10 @@ export interface CliIo {
   fetch?: FetchLike
 }
 
-/** Exit codes: 0 done, 1 `diff` found differences, 2 failed. */
+/**
+ * Exit codes: 0 done, 1 `diff` found differences or `pull`/`sync` left keys
+ * for a person (unrouted, duplicate), 2 failed.
+ */
 export const EXIT_DIFFERENT = 1
 export const EXIT_ERROR = 2
 
@@ -29,6 +32,7 @@ export const OPTIONS = {
   'base-url': { type: 'string' },
   project: { type: 'string' },
   dir: { type: 'string' },
+  into: { type: 'string' },
   pattern: { type: 'string' },
   format: { type: 'string' },
   force: { type: 'boolean' },
@@ -61,6 +65,11 @@ export function list(value: string | undefined) {
 
 export function plural(count: number, noun: string) {
   return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/** Config problems the comparison found; they never stop a command. */
+export function printWarnings(io: CliIo, warnings: readonly string[]) {
+  for (const warning of warnings) io.stderr(`localness: ${warning}\n`)
 }
 
 export async function readToken(io: CliIo, dir: string) {

@@ -3,6 +3,7 @@ export {
   SYNC_CONTENTS,
   findConfigFile,
   loadConfig,
+  normalizeDir,
   localnessConfigSchema,
   parseConfig,
   requireFiles,
@@ -16,10 +17,18 @@ export type {
   LocalnessFilesConfig,
   SyncContent,
 } from './config'
+export { routeKey, unknownNamespaces } from './route'
+export type { RouteBy, RouteContext, RouteTarget } from './route'
 export { resolveRelease } from './release'
 export type { ReleaseRef } from './release'
 export { matchLocalEntries, readLocalFiles } from './local'
-export type { LocalLocaleFile } from './local'
+export type {
+  LocalFiles,
+  LocalKeyLocation,
+  LocalLocale,
+  LocalLocaleFile,
+  LocalPlacement,
+} from './local'
 export { fetchPlatformTexts, platformTextOf } from './platform'
 export type { FetchPlatformTextsOptions, PlatformTexts } from './platform'
 export { DIFF_KINDS, compareLocaleFiles, diffLocaleTexts } from './diff'
@@ -39,7 +48,7 @@ export {
   pullLocaleFiles,
   recordPull,
 } from './pull'
-export type { PullFile, PullOptions } from './pull'
+export type { PullFile, PullOptions, PullPlan } from './pull'
 export {
   FORCED_PUSH_KINDS,
   PUSH_KINDS,

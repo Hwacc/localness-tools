@@ -110,13 +110,13 @@
       },
       {
         "command": "localness.sync.pull",
-        "title": "Pull project changes into locale files",
+        "title": "Pull remote changes into locale files",
         "category": "Localness",
         "icon": "$(cloud-download)"
       },
       {
         "command": "localness.sync.compare",
-        "title": "Compare with the project",
+        "title": "Compare with remote",
         "category": "Localness",
         "icon": "$(diff)"
       },
@@ -146,13 +146,13 @@
       },
       {
         "command": "localness.sync.push",
-        "title": "Push local changes to the project",
+        "title": "Push local changes to remote",
         "category": "Localness",
         "icon": "$(cloud-upload)"
       },
       {
         "command": "localness.sync.pushKey",
-        "title": "Push to Localness",
+        "title": "Push to remote",
         "category": "Localness",
         "icon": "$(cloud-upload)"
       },
@@ -434,7 +434,7 @@
       },
       {
         "view": "localness.sync",
-        "contents": "Add `files` to localness.config.json to compare the locale files with the project.\n[Open Localness CLI docs](https://github.com/Hwacc/localness-tools/tree/main/packages/cli#readme)",
+        "contents": "Add `files` to localness.config.json to compare the locale files with remote.\n[Open Localness CLI docs](https://github.com/Hwacc/localness-tools/tree/main/packages/cli#readme)",
         "when": "!localness.hasLocaleFiles"
       }
     ],
@@ -512,7 +512,7 @@
           "type": "boolean",
           "default": true,
           "scope": "window",
-          "description": "Warn about recognised keys that do not exist in the project."
+          "description": "Warn about recognised keys that do not exist on remote."
         },
         "localness.languages": {
           "type": "array",

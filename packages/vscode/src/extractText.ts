@@ -231,8 +231,11 @@ async function localHits(
 ): Promise<KeyHit[]> {
   const loaded = controller.config
   if (!loaded?.config.files) return []
-  const [file] = await readLocalFiles(loaded, [sourceLocale]).catch(() => [])
-  const entries = file?.content.entries ?? {}
+  const [file] = await readLocalFiles(loaded, [sourceLocale]).then(
+    (read) => read.locales,
+    () => [],
+  )
+  const entries = file?.entries ?? {}
   const seen = new Set(known.map((hit) => hit.key))
   return matchLocalEntries(entries, [text])[0]!
     .filter((key) => !seen.has(key))

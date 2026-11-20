@@ -21,7 +21,10 @@ type Texts = Record<
  * The project: `en` and `zh_cn`. Pass published text per key; the returned
  * `keys` is the live state, so tests can edit it and see writes land.
  */
-function project(initial: Record<string, Record<string, string>> = {}) {
+function project(
+  initial: Record<string, Record<string, string>> = {},
+  meta: Record<string, unknown> = {},
+) {
   const keys: Record<string, Texts> = {}
   for (const [key, texts] of Object.entries(initial)) {
     keys[key] = {}
@@ -64,6 +67,7 @@ function project(initial: Record<string, Record<string, string>> = {}) {
         coverage: { keys: 0, projectKeys: 0, publishedPerLocale: {} },
         canManageReleases: false,
         generatedAt: 'now',
+        ...meta,
       })
     }
     if (url.pathname.endsWith('/match')) {
@@ -154,8 +158,11 @@ function project(initial: Record<string, Record<string, string>> = {}) {
   return { fetch, keys, writes, labels }
 }
 
-function platform(keys: Record<string, Record<string, string>>): FetchLike {
-  return project(keys).fetch
+function platform(
+  keys: Record<string, Record<string, string>>,
+  meta: Record<string, unknown> = {},
+): FetchLike {
+  return project(keys, meta).fetch
 }
 
 describe('init detection', () => {
@@ -234,6 +241,113 @@ describe('commands', () => {
     expect(err.join('')).toMatch(/already exists/)
   })
 
+  it('init lists sibling directories and infers where new keys go', async () => {
+    for (const dir of ['default', 'boostprime']) {
+      await put(`src/locales/${dir}/en.json`, '{}')
+      await put(`src/locales/${dir}/zh-cn.json`, '{}')
+    }
+    await put(
+      'src/locales/default/en.json',
+      '{ "home_title": "Home", "cart_total": "Total" }',
+    )
+    await put(
+      'src/locales/boostprime/en.json',
+      '{ "boostprime_promo": "Promo", "boostprime_banner": "Banner" }',
+    )
+    const base = {
+      dir: 'src/locales/default',
+      pattern: '{locale}.json',
+      format: 'nested-json',
+    }
+    const second = { ...base, dir: 'src/locales/boostprime' }
+    const read = async () =>
+      JSON.parse(await readFile(join(root, 'localness.config.json'), 'utf8'))
+
+    expect(await cli(['init', '--base-url', BASE_URL], platform({}))).toBe(0)
+    expect((await read()).files).toEqual([
+      base,
+      { ...second, match: { key: '^boostprime[_.-]' } },
+    ])
+    expect((await read()).localeMap).toEqual({ zh_cn: 'zh-cn' })
+
+    const named = platform(
+      {},
+      { namespaces: [{ id: '1', name: 'boostprime', sort: 1 }] },
+    )
+    expect(await cli(['init', '--base-url', BASE_URL, '--force'], named)).toBe(
+      0,
+    )
+    expect((await read()).files).toEqual([
+      base,
+      { ...second, match: { namespace: 'boostprime' } },
+    ])
+  })
+
+  it('pull and sync exit 1 while keys wait for a person, and --into places them', async () => {
+    await put(
+      'localness.config.json',
+      JSON.stringify({
+        baseUrl: BASE_URL,
+        files: [
+          { dir: 'a', match: { key: '^a_' } },
+          { dir: 'b', match: { key: '^b_' } },
+        ],
+      }),
+    )
+    await put('a/en.json', '{ "dup": "one", "a_x": "X" }')
+    await put('b/en.json', '{ "dup": "two" }')
+    const fetch = platform({
+      dup: { en: 'one' },
+      a_x: { en: 'X' },
+      a_new: { en: 'New' },
+      stray: { en: 'Stray' },
+    })
+
+    expect(await cli(['pull', '--json'], fetch)).toBe(1)
+    const pulled = JSON.parse(out.join(''))
+    expect(
+      pulled.files.map((file: { relativePath: string }) => file.relativePath),
+    ).toEqual(['a/en.json'])
+    expect(pulled.unrouted).toMatchObject([{ key: 'stray', locale: 'en' }])
+    expect(pulled.duplicates).toMatchObject([
+      {
+        key: 'dup',
+        platform: 'one',
+        locations: [
+          { dir: 'a', value: 'one' },
+          { dir: 'b', value: 'two' },
+        ],
+      },
+    ])
+    expect(pulled.dirs).toEqual(['a', 'b'])
+
+    out.length = 0
+    expect(await cli(['sync'], fetch)).toBe(1)
+    expect(out.join('')).toMatch(
+      /no directory matches 1 key[\s\S]*duplicate key/,
+    )
+
+    expect(
+      await cli(['pull', '--keys', 'stray', '--into', 'nowhere'], fetch),
+    ).toBe(2)
+    expect(err.join('')).toMatch(/not a configured directory/)
+    expect(
+      await cli(['pull', '--keys', 'stray,dup', '--into', 'b'], fetch),
+    ).toBe(0)
+    expect(JSON.parse(await readFile(join(root, 'b/en.json'), 'utf8'))).toEqual(
+      {
+        dup: 'one',
+        stray: 'Stray',
+      },
+    )
+    expect(
+      JSON.parse(await readFile(join(root, 'a/en.json'), 'utf8')),
+    ).toMatchObject({
+      dup: 'one',
+      a_new: 'New',
+    })
+  })
+
   it('diff exits 1 until pull brings the files in line', async () => {
     await put(
       'localness.config.json',
@@ -253,6 +367,16 @@ describe('commands', () => {
         draft: 'Home',
         base: null,
         onPlatform: true,
+        target: { dir: 'locales', by: 'existing' },
+        locations: [
+          {
+            dir: 'locales',
+            relativePath: 'locales/en.json',
+            value: 'Old',
+            path: ['title'],
+          },
+        ],
+        dirs: ['locales'],
       },
       {
         locale: 'zh_cn',
@@ -263,6 +387,9 @@ describe('commands', () => {
         draft: '主页',
         base: null,
         onPlatform: true,
+        target: { dir: 'locales', by: 'existing' },
+        locations: [],
+        dirs: ['locales'],
       },
     ])
 

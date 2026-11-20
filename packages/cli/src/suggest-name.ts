@@ -36,7 +36,7 @@ export async function runSuggestName(
   }
   for (const duplicate of suggestion.duplicates) {
     io.stdout(
-      `Already in the project: ${duplicate.key} ${JSON.stringify(duplicate.sourceText)}${duplicate.sameSourceText ? ', same text; reuse it' : ''}\n`,
+      `Already on remote: ${duplicate.key} ${JSON.stringify(duplicate.sourceText)}${duplicate.sameSourceText ? ', same text; reuse it' : ''}\n`,
     )
   }
   if (suggestion.reason) io.stdout(`${suggestion.reason}\n`)

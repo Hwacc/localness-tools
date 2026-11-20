@@ -161,7 +161,7 @@ async function editLocale(
       current = conflict.key
       const theirs = editableText(current, locale).text
       const choice = await vscode.window.showWarningMessage(
-        `${label} changed in Localness since it was loaded.`,
+        `${label} changed on remote since it was loaded.`,
         {
           modal: true,
           detail: `It now reads: "${truncate(theirs, 200)}"\n\nEdit again to compare and save your text over it.`,

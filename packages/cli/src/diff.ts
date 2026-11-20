@@ -9,6 +9,7 @@ import {
   EXIT_DIFFERENT,
   list,
   loadProject,
+  printWarnings,
   type CliIo,
   type CliValues,
 } from './shared'
@@ -26,23 +27,25 @@ function detail(entry: DiffEntry) {
   const { local, platform, draft, base } = entry
   switch (entry.kind) {
     case 'platform-added':
-      return quote(platform)
+      return entry.target.by === 'unrouted'
+        ? `${quote(platform)} (no directory matches it)`
+        : quote(platform)
     case 'platform-changed':
       return `${quote(local)} → ${quote(platform)}`
     case 'platform-deleted':
-      return `${quote(local)} (deleted in the project)`
+      return `${quote(local)} (deleted on remote)`
     case 'local-added':
-      return `${quote(local)} (${entry.onPlatform ? 'no text' : 'not'} in the project)`
+      return `${quote(local)} (${entry.onPlatform ? 'no text' : 'not'} on remote)`
     case 'local-changed':
       return `${quote(platform)} → ${quote(local)}`
     case 'local-deleted':
       return `${quote(platform)} (deleted locally)`
     case 'different':
-      return `local ${quote(local)}, project ${quote(platform)}`
+      return `local ${quote(local)}, remote ${quote(platform)}`
     case 'conflict':
       return [
         `local ${quote(local)}`,
-        `project ${quote(platform)}`,
+        `remote ${quote(platform)}`,
         draft !== null && draft !== platform && `unpublished ${quote(draft)}`,
         `base ${quote(base)}`,
       ]
@@ -50,6 +53,10 @@ function detail(entry: DiffEntry) {
         .join(', ')
     case 'pending-publish':
       return `${quote(local)} (draft waiting for a publish)`
+    case 'duplicate':
+      return entry.locations.length > 0
+        ? `${entry.locations.map((place) => `${place.dir} ${quote(place.value)}`).join(', ')}; remote ${quote(platform)}`
+        : `no ${entry.locale} text in ${entry.dirs.join(', ')}; remote ${quote(platform)}`
   }
 }
 
@@ -70,19 +77,40 @@ export function countKinds(entries: readonly DiffEntry[]) {
 }
 
 export function filesByLocale(comparison: Comparison) {
-  return Object.fromEntries(
-    comparison.files.map((file) => [file.locale, file.relativePath]),
-  )
+  const files: Record<string, string[]> = {}
+  for (const file of comparison.files) {
+    ;(files[file.locale] ??= []).push(file.relativePath)
+  }
+  return files
+}
+
+/** A key `pull` left for a person, for JSON output. */
+export function attention(entry: DiffEntry) {
+  return {
+    locale: entry.locale,
+    key: entry.key,
+    platform: entry.platform,
+    dirs: entry.dirs,
+    locations: entry.locations.map(({ dir, relativePath, value }) => ({
+      dir,
+      relativePath,
+      value,
+    })),
+  }
 }
 
 const HINTS: [readonly DiffKind[], string][] = [
   [
     ['platform-added', 'platform-changed', 'different'],
-    '"localness pull" takes the project\'s text for platform-added, platform-changed and different.',
+    '"localness pull" takes the remote text for platform-added, platform-changed and different.',
   ],
   [
     ['local-added', 'local-changed'],
     '"localness push" plans sending local-added and local-changed.',
+  ],
+  [
+    ['duplicate'],
+    'A duplicate key is in several directories: "pull --keys <key>" writes the remote text to every place that has it ("--into <dir>" places a locale it has none in); never pick a directory for it yourself.',
   ],
   [
     ['conflict', 'local-deleted', 'platform-deleted'],
@@ -96,6 +124,7 @@ export async function runDiff(io: CliIo, values: CliValues) {
     locales: list(values.locales),
     keys: list(values.keys),
   })
+  printWarnings(io, comparison.warnings)
   const files = filesByLocale(comparison)
   const { entries } = comparison
   if (values.json) {
@@ -115,17 +144,17 @@ export async function runDiff(io: CliIo, values: CliValues) {
     )
   } else if (entries.length === 0) {
     io.stdout(
-      `Up to date: ${comparison.locales.length} locale files match the project's ${comparison.content} text.\n`,
+      `Up to date: ${comparison.locales.length} locale files match the remote ${comparison.content} text.\n`,
     )
   } else {
     for (const locale of comparison.locales) {
       const own = entries.filter((entry) => entry.locale === locale)
       if (own.length === 0) continue
-      io.stdout(`${files[locale]} (${locale})\n`)
+      io.stdout(`${files[locale]?.join(', ')} (${locale})\n`)
       for (const entry of own) io.stdout(`${describeEntry(entry)}\n`)
     }
     io.stdout(
-      `\n${entries.length} differences against the project's ${comparison.content} text: ${countKinds(entries)}.\n`,
+      `\n${entries.length} differences against the remote ${comparison.content} text: ${countKinds(entries)}.\n`,
     )
     if (comparison.base === null) {
       io.stdout(
@@ -136,6 +165,11 @@ export async function runDiff(io: CliIo, values: CliValues) {
       if (entries.some((entry) => kinds.includes(entry.kind))) {
         io.stdout(`${hint}\n`)
       }
+    }
+    if (entries.some((entry) => entry.target.by === 'unrouted')) {
+      io.stdout(
+        'Keys that match no directory stay unwritten until a person picks one: "pull --keys <key> --into <dir>".\n',
+      )
     }
   }
   return entries.length > 0 ? EXIT_DIFFERENT : 0

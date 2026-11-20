@@ -12,6 +12,7 @@ import {
   loadConfig,
   parseConfig,
   PULL_KINDS,
+  FORCED_PULL_KINDS,
   FORCED_PUSH_KINDS,
   PUSH_KINDS,
   applyPush,
@@ -24,6 +25,7 @@ import {
   readBase,
   recordPull,
   resolveRelease,
+  routeKey,
   savePlan,
   withConfigFields,
   writeBase,
@@ -34,7 +36,10 @@ import { BASE_URL, TOKEN, mockFetch } from './helpers'
 
 type Texts = Record<string, { draftText?: string; publishedText?: string }>
 
-function platform(keys: Record<string, Texts>) {
+function platform(
+  keys: Record<string, Texts>,
+  meta: Record<string, unknown> = {},
+) {
   return mockFetch((call) => {
     if (call.url.pathname.endsWith('/meta')) {
       return {
@@ -48,6 +53,7 @@ function platform(keys: Record<string, Texts>) {
           coverage: { keys: 0, projectKeys: 0, publishedPerLocale: {} },
           canManageReleases: false,
           generatedAt: 'now',
+          ...meta,
         },
       }
     }
@@ -198,17 +204,14 @@ describe('locale file sync', () => {
     })
     const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
     const comparison = await compareLocaleFiles(loaded, client)
-    const plan = planPull(comparison, {
-      format: 'nested-json',
-      kinds: PULL_KINDS,
-    })
+    const plan = planPull(comparison, { kinds: PULL_KINDS })
     expect(
-      plan.map((file) => [file.relativePath, file.created, file.set]),
+      plan.files.map((file) => [file.relativePath, file.created, file.set]),
     ).toEqual([
       ['locales/en.json', false, ['home.cta', 'home.title']],
       ['locales/ja.json', true, ['home.title']],
     ])
-    await applyPull(plan)
+    await applyPull(plan.files)
     expect(await readFile(join(root, 'locales', 'en.json'), 'utf8')).toBe(
       '{\n    "home": {\n        "title": "Home",\n        "cta": "Go"\n    },\n    "mine": "Keep"\n}\n',
     )
@@ -228,8 +231,9 @@ describe('locale file sync', () => {
       cta: { en: { publishedText: 'Go', draftText: 'Go now' } },
     })
     const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
-    const [file] = planPull(await compareLocaleFiles(loaded, client), {
-      format: 'nested-json',
+    const {
+      files: [file],
+    } = planPull(await compareLocaleFiles(loaded, client), {
       kinds: PULL_KINDS,
       prune: true,
     })
@@ -450,5 +454,314 @@ describe('locale file sync', () => {
     await expect(compareLocaleFiles(loaded, client)).rejects.toThrow(
       /Unknown locale fr/,
     )
+  })
+
+  describe('several directories', () => {
+    const files = [
+      { dir: 'default' },
+      { dir: 'boostprime', match: { namespace: 'boostprime' } },
+    ]
+    const meta = {
+      namespaces: [{ id: '1', name: 'boostprime', sort: 1 }],
+      keyConvention: {
+        prefix: '',
+        separator: '_',
+        style: 'snake_case',
+        maxDepth: 4,
+        guidance: null,
+      },
+    }
+
+    async function write(path: string, content: unknown) {
+      await mkdir(join(root, ...path.split('/').slice(0, -1)), {
+        recursive: true,
+      })
+      await writeFile(join(root, ...path.split('/')), JSON.stringify(content))
+    }
+
+    const read = async (path: string) =>
+      JSON.parse(await readFile(join(root, ...path.split('/')), 'utf8'))
+
+    async function compare(
+      loaded: Awaited<ReturnType<typeof setup>>,
+      keys: Record<string, Texts>,
+      options: { locales?: string[]; projectLocales?: string[] } = {},
+    ) {
+      const client = createClient({
+        baseUrl: BASE_URL,
+        token: TOKEN,
+        fetch: platform(keys, {
+          ...meta,
+          ...(options.projectLocales && { locales: options.projectLocales }),
+        }).fetch,
+      })
+      return {
+        client,
+        comparison: await compareLocaleFiles(loaded, client, {
+          locales: options.locales,
+        }),
+      }
+    }
+
+    it('keeps a key in the directory holding it in a locale that was not requested', async () => {
+      const loaded = await setup({
+        files: [
+          { dir: 'default' },
+          { dir: 'boostprime', match: { key: '^zzz' } },
+        ],
+        locales: ['en', 'ja'],
+      })
+      await write('default/en.json', { a: 'A' })
+      await write('boostprime/en.json', { boostprime_x: 'X' })
+      const { comparison } = await compare(
+        loaded,
+        {
+          boostprime_x: {
+            en: { publishedText: 'X' },
+            ja: { publishedText: 'ja' },
+          },
+        },
+        { locales: ['ja'] },
+      )
+      const [entry] = comparison.entries
+      expect(entry).toMatchObject({ locale: 'ja', kind: 'platform-added' })
+      expect(entry!.target).toEqual({ dir: 'boostprime', by: 'existing' })
+      expect(comparison.files.every((file) => file.locale === 'ja')).toBe(true)
+      const plan = planPull(comparison, { kinds: PULL_KINDS })
+      await applyPull(plan.files)
+      expect(await read('boostprime/ja.json')).toEqual({ boostprime_x: 'ja' })
+      await expect(read('default/ja.json')).rejects.toThrow()
+    })
+
+    it('detects a duplicate across locales that were not requested', async () => {
+      const loaded = await setup({ files, locales: ['en', 'ja'] })
+      await write('default/en.json', { shared: 'S' })
+      await write('boostprime/zh-CN.json', { shared: 'S-zh' })
+      const { comparison } = await compare(
+        loaded,
+        { shared: { ja: { publishedText: 'S-ja' } } },
+        { locales: ['ja'], projectLocales: ['en', 'ja', 'zh-CN'] },
+      )
+      expect(
+        comparison.entries.map((entry) => [
+          entry.locale,
+          entry.key,
+          entry.kind,
+        ]),
+      ).toEqual([['ja', 'shared', 'duplicate']])
+    })
+
+    it('accepts an object or a list and checks every entry', () => {
+      const parse = (files: unknown) =>
+        parseConfig(JSON.stringify({ baseUrl: BASE_URL, files }))
+      expect(parse({ dir: 'a' }).files).toEqual([
+        { dir: 'a', pattern: '{locale}.json', format: 'nested-json' },
+      ])
+      expect(parse(files).files).toHaveLength(2)
+      expect(() => parse([{ dir: 'a' }, { dir: 'a' }])).toThrow(/listed twice/)
+      expect(() => parse([{ dir: 'a', match: { key: '(' } }])).toThrow(
+        /regular expression/,
+      )
+      expect(() => parse([{ dir: 'a', match: {} }])).toThrow(/needs/)
+      expect(() => parse([{ dir: 'a' }, { dir: '/abs' }])).toThrow()
+    })
+
+    it('routes a key to its directory, a match, the fallback, or nowhere', () => {
+      const all = parseConfig(
+        JSON.stringify({
+          baseUrl: BASE_URL,
+          files: [
+            { dir: 'a', match: { key: '^x_' } },
+            { dir: 'b', match: { namespace: 'boostprime', key: '_new$' } },
+            { dir: 'c', match: { namespace: 'boostprime' } },
+            { dir: 'd' },
+          ],
+        }),
+      ).files!
+      const context = { namespaces: ['boostprime'], keyPrefix: '' }
+      const route = (key: string, existing?: string[]) =>
+        routeKey(key, all, { ...context, existing })
+      expect(route('x_one')).toEqual({ dir: 'a', by: 'key' })
+      expect(route('boostprime_new')).toEqual({ dir: 'b', by: 'namespace' })
+      expect(route('boostprime_old')).toEqual({ dir: 'c', by: 'namespace' })
+      expect(route('other')).toEqual({ dir: 'd', by: 'fallback' })
+      expect(route('x_one', ['d'])).toEqual({ dir: 'd', by: 'existing' })
+      expect(routeKey('other', all.slice(0, 3), context)).toEqual({
+        dir: null,
+        by: 'unrouted',
+      })
+    })
+
+    it('pulls each key into its directory, writing every location of a duplicate', async () => {
+      const loaded = await setup({ files, locales: ['en', 'ja'] })
+      await write('default/en.json', { a: 'A', shared: 'S' })
+      await write('boostprime/en.json', { boostprime_x: 'X', shared: 'S' })
+      const { comparison } = await compare(loaded, {
+        a: { en: { publishedText: 'A' } },
+        shared: { en: { publishedText: 'S2' }, ja: { publishedText: 'S-ja' } },
+        boostprime_x: { en: { publishedText: 'X' } },
+        boostprime_new: { en: { publishedText: 'N' } },
+        plain_new: { en: { publishedText: 'P' } },
+      })
+      expect(
+        comparison.entries.map((entry) => [entry.key, entry.kind]),
+      ).toEqual([
+        ['boostprime_new', 'platform-added'],
+        ['plain_new', 'platform-added'],
+        ['shared', 'different'],
+        ['shared', 'duplicate'],
+      ])
+      expect(
+        comparison.entries.find((entry) => entry.key === 'boostprime_new')!
+          .target,
+      ).toEqual({ dir: 'boostprime', by: 'namespace' })
+      const plan = planPull(comparison, { kinds: PULL_KINDS })
+      expect(plan.duplicates.map((entry) => entry.locale)).toEqual(['ja'])
+      expect(plan.files.map((file) => [file.relativePath, file.set])).toEqual([
+        ['default/en.json', ['plain_new', 'shared']],
+        ['boostprime/en.json', ['boostprime_new', 'shared']],
+      ])
+      await applyPull(plan.files)
+      expect(await read('boostprime/en.json')).toEqual({
+        boostprime_x: 'X',
+        shared: 'S2',
+        boostprime_new: 'N',
+      })
+      expect(await read('default/en.json')).toEqual({
+        a: 'A',
+        shared: 'S2',
+        plain_new: 'P',
+      })
+    })
+
+    it('holds back keys that differ between directories, and a new locale of a duplicate', async () => {
+      const loaded = await setup({ files, locales: ['en', 'ja'] })
+      await write('default/en.json', { diff: 'one', same: 'S' })
+      await write('boostprime/en.json', { diff: 'two', same: 'S' })
+      const { comparison } = await compare(loaded, {
+        diff: { en: { publishedText: 'one' } },
+        same: { en: { publishedText: 'S' }, ja: { publishedText: 'ja' } },
+      })
+      const entries = comparison.entries.map((entry) => [
+        entry.locale,
+        entry.key,
+        entry.kind,
+        entry.local,
+        entry.locations.map((place) => place.value),
+      ])
+      expect(entries).toEqual([
+        ['en', 'diff', 'duplicate', null, ['one', 'two']],
+        ['ja', 'same', 'duplicate', null, []],
+      ])
+      expect(comparison.local.en).toEqual({ same: 'S' })
+
+      const plan = planPull(comparison, { kinds: PULL_KINDS })
+      expect(plan.files).toEqual([])
+      expect(plan.duplicates).toHaveLength(2)
+      const forced = planPull(comparison, { kinds: FORCED_PULL_KINDS })
+      expect(forced.files.map((file) => [file.relativePath, file.set])).toEqual(
+        [
+          ['default/en.json', ['diff']],
+          ['boostprime/en.json', ['diff']],
+        ],
+      )
+      expect(forced.duplicates.map((entry) => entry.locale)).toEqual(['ja'])
+      const placed = planPull(comparison, {
+        kinds: FORCED_PULL_KINDS,
+        into: 'boostprime/',
+      })
+      expect(placed.duplicates).toEqual([])
+      expect(
+        placed.files.find((file) => file.relativePath === 'boostprime/ja.json'),
+      ).toMatchObject({ created: true, set: ['same'] })
+      expect(() =>
+        planPull(comparison, { kinds: FORCED_PULL_KINDS, into: 'nowhere' }),
+      ).toThrow(/not a configured directory/)
+
+      const pushPlan = planPush(loaded, comparison, {
+        kinds: FORCED_PUSH_KINDS,
+      })
+      expect(pushPlan.keys).toEqual([])
+      expect(pushPlan.blocked).toEqual([
+        { locale: 'en', key: 'diff', reason: 'duplicate' },
+      ])
+    })
+
+    it('leaves unrouted keys for a person and writes them with --into', async () => {
+      const loaded = await setup({
+        files: [{ dir: 'default', match: { key: '^a' } }, files[1]!],
+        locales: ['en'],
+      })
+      await write('default/en.json', {})
+      const { comparison } = await compare(loaded, {
+        zzz: { en: { publishedText: 'Z' } },
+        abc: { en: { publishedText: 'A' } },
+      })
+      const plan = planPull(comparison, { kinds: PULL_KINDS })
+      expect(plan.unrouted.map((entry) => entry.key)).toEqual(['zzz'])
+      expect(plan.files.map((file) => [file.relativePath, file.set])).toEqual([
+        ['default/en.json', ['abc']],
+      ])
+      const into = planPull(comparison, {
+        kinds: PULL_KINDS,
+        into: 'boostprime',
+      })
+      expect(into.unrouted).toEqual([])
+      expect(into.files.map((file) => [file.relativePath, file.set])).toEqual([
+        ['default/en.json', ['abc']],
+        ['boostprime/en.json', ['zzz']],
+      ])
+    })
+
+    it('writes each directory in its own format, prunes everywhere, and records the base', async () => {
+      const loaded = await setup({
+        files: [
+          { dir: 'default' },
+          { dir: 'flat', format: 'flat-json', match: { key: '^flat' } },
+        ],
+        locales: ['en'],
+      })
+      await write('default/en.json', { gone: 'x', held: 'one' })
+      await write('flat/en.json', { gone: 'x', held: 'two' })
+      const { comparison } = await compare(loaded, {
+        'flat.a': { en: { publishedText: 'F' } },
+        'nest.b': { en: { publishedText: 'N' } },
+        held: { en: { publishedText: 'H' } },
+      })
+      const plan = planPull(comparison, {
+        kinds: FORCED_PULL_KINDS,
+        prune: true,
+      })
+      await applyPull(plan.files)
+      expect(await read('flat/en.json')).toEqual({
+        'flat.a': 'F',
+        held: 'H',
+      })
+      expect(await read('default/en.json')).toEqual({
+        nest: { b: 'N' },
+        held: 'H',
+      })
+      expect(recordPull(comparison, plan.files).en).toEqual({
+        'flat.a': 'F',
+        'nest.b': 'N',
+        held: 'H',
+      })
+    })
+
+    it('keeps the base of keys a pull skipped', async () => {
+      const loaded = await setup({ files, locales: ['en'] })
+      await write('default/en.json', { diff: 'one' })
+      await write('boostprime/en.json', { diff: 'two' })
+      const { comparison } = await compare(loaded, {
+        diff: { en: { publishedText: 'P' } },
+        fresh: { en: { publishedText: 'F' } },
+      })
+      const noHome = { ...comparison, base: { en: { diff: 'old' } } }
+      const plan = planPull(noHome, { kinds: PULL_KINDS })
+      expect(recordPull(noHome, plan.files).en).toEqual({
+        diff: 'old',
+        fresh: 'F',
+      })
+    })
   })
 })

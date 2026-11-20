@@ -48,7 +48,7 @@ for await (const page of client.keyStatePages({
 
 Every method takes an optional `project` (on its scope or options) that overrides the client default.
 
-`client` labels writes in the platform's key history. It is sent as `X-Localness-Client`, formatted `name/version`, with `; agent` appended when an AI agent drives the tool (for example `cli/0.1.0; agent`). It is a self-reported label, not a permission, and malformed values are recorded as unknown. Leave it unset in browsers: the custom header triggers a CORS preflight.
+`client` labels writes in the key history in Localness. It is sent as `X-Localness-Client`, formatted `name/version`, with `; agent` appended when an AI agent drives the tool (for example `cli/0.1.0; agent`). It is a self-reported label, not a permission, and malformed values are recorded as unknown. Leave it unset in browsers: the custom header triggers a CORS preflight.
 
 ### Writes
 
@@ -156,7 +156,9 @@ Concurrent `refresh()` calls share one request. `contentHash(value)`, `stableStr
 
 ## Locale file sync (`@localness/sdk/sync`)
 
-The core of `@localness/cli`, Node only. It reads `localness.config.json`, compares local locale JSON files with the project three ways (local, platform, and the base: the last text both agreed on, kept in `.localness/base.json`), and plans writes in both directions.
+The core of `@localness/cli`, Node only. It reads `localness.config.json`, compares local locale JSON files with remote three ways (local, remote, and the base: the last text both agreed on, kept in `.localness/base.json`), and plans writes in both directions.
+
+Terminology: **remote** is the texts of the configured project on the Localness instance, **local** the locale files, **project** the Localness project itself, **locale** a language. Identifiers keep the older name: `platform` in fields (`platform`, `onPlatform`), kinds (`platform-added` …) and functions (`fetchPlatformTexts`) means remote.
 
 ```ts
 import { createClient } from '@localness/sdk'
@@ -174,7 +176,6 @@ import {
   readBase,
   recordPull,
   recordPush,
-  requireFiles,
   writeBase,
 } from '@localness/sdk/sync'
 
@@ -183,36 +184,36 @@ const { baseUrl, project } = loaded.config
 const client = createClient({ baseUrl, project, token })
 
 const comparison = await compareLocaleFiles(loaded, client, { locales: ['ja'] })
-// entries: { locale, key, kind, local, platform, draft, base, onPlatform }
+// entries: { locale, key, kind, local, platform, draft, base, onPlatform, target, locations, dirs }
 
-const files = planPull(comparison, {
-  format: requireFiles(loaded).format,
-  kinds: PULL_KINDS,
-  prune: false,
-})
-await applyPull(files)
-await writeBase(loaded, recordPull(comparison, files))
+const plan = planPull(comparison, { kinds: PULL_KINDS, prune: false })
+await applyPull(plan.files)
+await writeBase(loaded, recordPull(comparison, plan.files))
+// plan.unrouted and plan.duplicates: keys left for a person; planPull(…, { into: 'dir' }) places them
 
-const plan = planPush(loaded, comparison, { kinds: PUSH_KINDS })
-const check = await checkPlan(client, plan)
+const push = planPush(loaded, comparison, { kinds: PUSH_KINDS })
+const check = await checkPlan(client, push)
 if (!check.expired && check.stale.length === 0) {
-  const result = await applyPush(client, plan, check)
+  const result = await applyPush(client, push, check)
   const base = await readBase(loaded)
-  await writeBase(loaded, recordPush(base, plan, result))
+  await writeBase(loaded, recordPush(base, push, result))
 }
 ```
 
-| Kind               | Meaning                                                                 |
-| ------------------ | ----------------------------------------------------------------------- |
-| `platform-added`   | The project has text the file lacks.                                    |
-| `platform-changed` | The project changed since the base; the file did not.                   |
-| `platform-deleted` | The key left the project; the file still has the base text.             |
-| `local-added`      | The file has text the project lacks (or the key is not in the project). |
-| `local-changed`    | The file changed since the base; the project did not.                   |
-| `local-deleted`    | The file removed a key the project still has unchanged.                 |
-| `different`        | Text differs and there is no base to tell which side changed.           |
-| `conflict`         | Both sides changed, or the file would overwrite someone else's draft.   |
-| `pending-publish`  | The file matches the project's unpublished draft.                       |
+| Kind               | Meaning                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `platform-added`   | Remote has text the file lacks.                                                                                       |
+| `platform-changed` | Remote changed since the base; the file did not.                                                                      |
+| `platform-deleted` | The key left remote; the file still has the base text.                                                                |
+| `local-added`      | The file has text remote lacks (or the key is not on remote).                                                         |
+| `local-changed`    | The file changed since the base; remote did not.                                                                      |
+| `local-deleted`    | The file removed a key remote still has unchanged.                                                                    |
+| `different`        | Text differs and there is no base to tell which side changed.                                                         |
+| `conflict`         | Both sides changed, or the file would overwrite someone else's draft.                                                 |
+| `pending-publish`  | The file matches the unpublished remote draft.                                                                        |
+| `duplicate`        | The key is in several directories with different texts, or remote added a locale it has no file for. Never automatic. |
+
+`files` in the config is one directory or a list (`requireFiles` returns the list). `readLocalFiles` returns every directory's file per locale plus a merged view and each key's `locations`. `placementLocales` reads more locales for `placement.dirs` only (the files returned stay the requested ones); `compareLocaleFiles` passes every project locale, so a key's directory and duplicates do not depend on `--locales`; `routeKey(key, files, { namespaces, keyPrefix, existing })` decides a new key's directory (`existing`, `namespace`, `key`, `fallback` or `unrouted`). `planPull` returns `{ files, unrouted, duplicates }` and takes `into` for keys with no place. The git-sync `locale-files` setting in Localness is still a single directory.
 
 `PULL_KINDS` / `SYNC_PULL_KINDS` / `FORCED_PULL_KINDS` and `PUSH_KINDS` / `FORCED_PUSH_KINDS` are the kind sets the CLI uses. Push plans live in `.localness/plans/`, expire after an hour, hold at most 200 keys and are bound to the base URL, project and `content`. `prunePlans` deletes expired ones (the CLI runs it on `push`, `sync` and `apply` without an id). `applyPush` creates new keys, then updates drafts with the draft text read by `checkPlan` as `expected`, and stops at the first error. `diffLocaleTexts`, `fetchPlatformTexts`, `readLocalFiles` and `parseConfig` are exported for other flows. The config's `release` labels the keys a push creates: `resolveRelease(loaded, client)` turns it into `{ id, name }` (null when unset, an error when the project lacks it), passed as `planPush(…, { release })`. `writeConfigFields(path, fields)` rewrites config fields in place, keeping the others and their order; an `undefined` value removes the field. Keys of unnamed drafts are skipped; `content: "draft"` compares draft text instead of published text.
 

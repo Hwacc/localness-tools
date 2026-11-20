@@ -16,7 +16,14 @@ import {
 } from '@localness/sdk/sync'
 import type { LocalnessClient } from '@localness/sdk'
 import { countKinds, quote } from './diff'
-import { list, loadProject, plural, type CliIo, type CliValues } from './shared'
+import {
+  list,
+  loadProject,
+  plural,
+  printWarnings,
+  type CliIo,
+  type CliValues,
+} from './shared'
 
 /** Never pushed without naming the key: either side may be the newer one. */
 const NEEDS_KEYS: readonly DiffKind[] = ['different', 'conflict']
@@ -123,6 +130,7 @@ export async function runPush(io: CliIo, values: CliValues) {
     locales: list(values.locales),
     keys,
   })
+  printWarnings(io, comparison.warnings)
   const dryRun = values['dry-run'] ?? false
   const planned = await planPushFrom(io, loaded, client, comparison, {
     kinds: keys ? FORCED_PUSH_KINDS : PUSH_KINDS,

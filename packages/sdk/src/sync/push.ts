@@ -66,6 +66,10 @@ export function planPush(
   const misnamed = new Set<string>()
 
   for (const entry of comparison.entries) {
+    if (entry.kind === 'duplicate' && entry.locations.length > 0) {
+      block(entry, 'duplicate')
+      continue
+    }
     if (!kinds.has(entry.kind) || entry.local === null) continue
     if (isUnnamedKey(entry.key)) {
       block(entry, 'reserved-name')
@@ -137,6 +141,8 @@ export function describeBlocked(item: PushBlocked, sourceLocale: string) {
       return `the ${sourceLocale} file lacks it; a new key needs its source text`
     case 'reserved-name':
       return '__unnamed_ names are reserved for unnamed drafts'
+    case 'duplicate':
+      return 'the key is in several directories with different texts; choose one by hand'
     case 'key-name':
       return `breaks the project's key convention: ${describeViolations(item.violations ?? [])}`
   }

@@ -65,12 +65,8 @@ jobs:
       - name: Publish to VS Code Marketplace
         run: pnpm exec vsce publish --oidc --packagePath localness.vsix --skip-duplicate
 
-      # Open VSX requires the first version to be published with OVSX_PAT; once Trusted Publishing is set up, drop the secret.
       - name: Publish to Open VSX
-        if: vars.OPENVSX_ENABLED == 'true'
-        run: pnpm exec ovsx publish localness.vsix --skip-duplicate
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: pnpm exec ovsx publish localness.vsix --trusted-publishing --skip-duplicate
 
       - name: Commit version to main
         if: steps.target.outputs.version

@@ -48,6 +48,7 @@ export const PUSH_BLOCK_REASONS = [
   'no-source-text',
   'reserved-name',
   'key-name',
+  'duplicate',
 ] as const
 
 export const pushPlanSchema = originSchema.extend({

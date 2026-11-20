@@ -123,10 +123,10 @@ export function takenNames(
     if (names.length === 0) return found
     const [local] =
       loaded.config.files && sourceLocale
-        ? await readLocalFiles(loaded, [sourceLocale])
+        ? (await readLocalFiles(loaded, [sourceLocale])).locales
         : []
     for (const name of names) {
-      if (local && name in local.content.entries) found.add(name)
+      if (local && name in local.locations) found.add(name)
     }
     const { keys } = await client.keyStates({
       keys: names,

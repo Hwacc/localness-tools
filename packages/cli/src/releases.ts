@@ -100,7 +100,7 @@ async function label(
   const found = new Map(result.keys.map((state) => [state.key, state]))
   const missing = keys.filter((key) => !found.has(key))
   if (missing.length > 0) {
-    throw new Error(`The project has no key ${missing.join(', ')}.`)
+    throw new Error(`Remote has no key ${missing.join(', ')}.`)
   }
   const pattern = values.match === undefined ? null : globToRegExp(values.match)
   const id = Number(release.id)

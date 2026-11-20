@@ -1,5 +1,5 @@
 import { readFile, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, posix, resolve } from 'node:path'
 import {
   DEFAULT_LOCALE_FILE_PATTERN,
   LocaleFileFormat,
@@ -13,16 +13,65 @@ export const CONFIG_FILE_NAME = 'localness.config.json'
 export const SYNC_CONTENTS = ['published', 'draft'] as const
 export type SyncContent = (typeof SYNC_CONTENTS)[number]
 
-const filesSchema = z
+function isRegExp(source: string) {
+  try {
+    new RegExp(source)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const matchSchema = z
+  .object({
+    /** Regular expression tested against the whole key. */
+    key: z
+      .string()
+      .refine(isRegExp, { message: 'must be a valid regular expression' })
+      .optional(),
+    /** Platform namespace the key belongs to. */
+    namespace: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((match) => match.key !== undefined || match.namespace !== undefined, {
+    message: 'needs "key" or "namespace"',
+  })
+
+/** The `/`-separated form `dir`s are compared and addressed by. */
+export function normalizeDir(dir: string) {
+  return posix.normalize(dir.replaceAll('\\', '/')).replace(/\/+$/, '')
+}
+
+const fileSchema = z
   .object({
     /** Relative to the config file. */
     dir: z.string(),
     pattern: z.string().default(DEFAULT_LOCALE_FILE_PATTERN),
     format: z.enum(LocaleFileFormat).default(LocaleFileFormat.NESTED_JSON),
+    /** Which new keys go here; every condition must hold. Omit for the fallback directory. */
+    match: matchSchema.optional(),
   })
-  .superRefine((files, ctx) => {
-    const error = localeFilesScopeError(files.dir, files.pattern)
+  .superRefine((file, ctx) => {
+    const error = localeFilesScopeError(file.dir, file.pattern)
     if (error) ctx.addIssue({ code: 'custom', message: error })
+  })
+
+const filesSchema = z
+  .union([fileSchema, z.array(fileSchema).min(1)])
+  .transform((files) => (Array.isArray(files) ? files : [files]))
+  .superRefine((files, ctx) => {
+    const seen = new Set<string>()
+    for (const [index, file] of files.entries()) {
+      const dir = normalizeDir(file.dir)
+      if (seen.has(dir)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [index, 'dir'],
+          message: `"${file.dir}" is listed twice`,
+        })
+      }
+      seen.add(dir)
+    }
   })
 
 /**
@@ -36,7 +85,7 @@ export const localnessConfigSchema = z.object({
   project: z
     .union([z.string().trim().min(1), z.number().int().positive()])
     .optional(),
-  /** Local locale files, laid out like git-sync's `locale-files`. */
+  /** Local locale files, laid out like git-sync's `locale-files`: one directory, or a list of them. */
   files: filesSchema.optional(),
   /** Platform locale codes to sync. Omit for every project locale. */
   locales: z.array(z.string().min(1)).optional(),
@@ -54,7 +103,8 @@ export const localnessConfigSchema = z.object({
 
 export type LocalnessConfig = z.output<typeof localnessConfigSchema>
 export type LocalnessConfigInput = z.input<typeof localnessConfigSchema>
-export type LocalnessFilesConfig = NonNullable<LocalnessConfig['files']>
+/** One configured directory. */
+export type LocalnessFilesConfig = NonNullable<LocalnessConfig['files']>[number]
 
 export interface LoadedConfig {
   /** Absolute path of the config file. */
@@ -135,7 +185,7 @@ export async function writeConfigFields(
   if (next !== source) await writeFile(path, next, 'utf8')
 }
 
-export function requireFiles(loaded: LoadedConfig): LocalnessFilesConfig {
+export function requireFiles(loaded: LoadedConfig): LocalnessFilesConfig[] {
   if (!loaded.config.files) {
     throw new Error(
       `${loaded.path} has no "files" section; run "localness init" or add { "files": { "dir": "src/locales" } }.`,

@@ -8,6 +8,8 @@ export interface PlatformTexts {
   sourceLocale: string
   /** The requested locales. */
   locales: string[]
+  /** Every locale of the project, requested or not. */
+  projectLocales: string[]
   /**
    * Per locale, every named key: its text, or null when it has none. Also
    * holds the source locale when it was not requested, for push.
@@ -17,6 +19,8 @@ export interface PlatformTexts {
   drafts: Record<string, Record<string, string | null>>
   /** The rules new key names follow; absent from servers before it. */
   keyConvention?: DeliveryKeyConvention | null
+  /** The project's declared namespace names. */
+  namespaces: string[]
 }
 
 type LocaleState = DeliveryKeyState['locales'][string] | undefined
@@ -80,8 +84,10 @@ export async function fetchPlatformTexts(
   return {
     sourceLocale: result.sourceLocale,
     locales,
+    projectLocales: meta.locales,
     texts,
     drafts,
     keyConvention: meta.keyConvention ?? null,
+    namespaces: (meta.namespaces ?? []).map((namespace) => namespace.name),
   }
 }

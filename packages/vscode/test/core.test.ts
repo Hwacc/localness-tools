@@ -4,7 +4,12 @@ import {
   type DeliveryMeta,
 } from '@localness/sdk'
 import { describe, expect, it } from 'vitest'
-import type { DiffKind } from '@localness/sdk/sync'
+import {
+  PULL_KINDS,
+  diffLocaleTexts,
+  type Comparison,
+  type DiffKind,
+} from '@localness/sdk/sync'
 import {
   buildProjectData,
   projectSetting,
@@ -12,6 +17,7 @@ import {
 } from '../src/core/data'
 import { describeError } from '../src/core/errors'
 import { localeIcon, localeName } from '../src/core/locales'
+import { duplicateMarks, keysToPlace, placeIn } from '../src/core/placement'
 import { filterByRelease, releaseChanges } from '../src/core/releases'
 import {
   buildHoverInfo,
@@ -375,5 +381,82 @@ describe('localOnlyTexts', () => {
       entry('home.title', 'en', 'local-changed', 'Title'),
     ])
     expect([...texts]).toEqual([['home.new', { en: 'New', ja: '新しい' }]])
+  })
+})
+
+describe('placing keys across directories', () => {
+  const file = (dir: string) => ({
+    locale: 'en',
+    dir,
+    format: 'nested-json' as const,
+    path: `/${dir}/en.json`,
+    relativePath: `${dir}/en.json`,
+    source: null,
+    content: { entries: {}, paths: new Map(), blocked: [] },
+  })
+  const place = (dir: string, value: string) => ({
+    dir,
+    relativePath: `${dir}/en.json`,
+    value,
+    path: [],
+  })
+  const comparison = () => {
+    const entries = diffLocaleTexts({
+      locales: ['en'],
+      local: { en: { dup: 'x' } },
+      platform: {
+        texts: { en: { dup: 'P', routed: 'R', stray: 'S' } },
+        drafts: { en: {} },
+      },
+      base: null,
+      placement: {
+        dirs: { dup: ['a', 'b'] },
+        locations: {
+          en: { dup: [place('a', 'one'), place('b', 'two')] },
+        },
+      },
+      route: (key) =>
+        key === 'stray'
+          ? { dir: null, by: 'unrouted' }
+          : { dir: 'b', by: 'namespace' },
+    })
+    return { files: [file('a'), file('b')], entries } as unknown as Comparison
+  }
+
+  it('asks only for keys nothing placed, and for routed ones on request', () => {
+    const compared = comparison()
+    const plain = keysToPlace(compared, PULL_KINDS, false)
+    expect(plain.waiting.map((entry) => entry.key)).toEqual(['stray'])
+    expect(plain.fresh).toEqual([])
+    const asked = keysToPlace(compared, PULL_KINDS, true)
+    expect(asked.fresh.map((entry) => entry.key)).toEqual(['routed'])
+    expect(
+      keysToPlace({ ...compared, files: [file('a')] }, PULL_KINDS, true),
+    ).toEqual({ waiting: [], fresh: [] })
+  })
+
+  it('applies the chosen directory to routed keys and passes it as into', () => {
+    const compared = comparison()
+    const placement = keysToPlace(compared, PULL_KINDS, true)
+    const placed = placeIn(compared, placement, 'a')
+    expect(placed.into).toBe('a')
+    expect(
+      placed.comparison.entries.find((entry) => entry.key === 'routed')!.target,
+    ).toEqual({ dir: 'a', by: 'namespace' })
+    expect(
+      placeIn(compared, { waiting: [], fresh: placement.fresh }, 'a').into,
+    ).toBeUndefined()
+  })
+
+  it('marks every copy of a key whose directories disagree', () => {
+    expect(
+      duplicateMarks(comparison().entries).map((mark) => [
+        mark.relativePath,
+        mark.key,
+      ]),
+    ).toEqual([
+      ['a/en.json', 'dup'],
+      ['b/en.json', 'dup'],
+    ])
   })
 })

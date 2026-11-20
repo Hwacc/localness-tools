@@ -10,6 +10,7 @@ import {
   compareLocaleFiles,
   describeBlocked,
   describeViolations,
+  normalizeDir,
   planPush,
   pullLocaleFiles,
   readBase,
@@ -23,8 +24,9 @@ import {
 import type { LocalnessClient } from '@localness/sdk'
 import type { DataController } from './controller'
 import { describeError } from './core/errors'
-import { showKeyInFile } from './localFiles'
+import { placeKeys, showKeyInFile } from './localFiles'
 import { localOnlyTexts, truncate } from './core/keys'
+import { duplicateMarks } from './core/placement'
 import { readSettings } from './settings'
 import { releaseForNewKeys } from './releases'
 import type { LocalChanges } from './localChanges'
@@ -34,14 +36,15 @@ const TEXT_SCHEME = 'localness-text'
 const REFRESH_DEBOUNCE_MS = 1500
 
 const KIND_GROUPS: Record<DiffKind, { label: string; icon: string }> = {
-  'platform-added': { label: 'New in the project', icon: 'diff-added' },
-  'platform-changed': { label: 'Changed in the project', icon: 'cloud' },
-  'platform-deleted': { label: 'Removed from the project', icon: 'trash' },
+  'platform-added': { label: 'New on remote', icon: 'diff-added' },
+  'platform-changed': { label: 'Changed on remote', icon: 'cloud' },
+  'platform-deleted': { label: 'Removed from remote', icon: 'trash' },
   'local-added': { label: 'Only in the locale files', icon: 'file-add' },
   'local-changed': { label: 'Changed locally', icon: 'edit' },
   'local-deleted': { label: 'Removed locally', icon: 'diff-removed' },
   different: { label: 'Different, no base', icon: 'question' },
   conflict: { label: 'Conflicts', icon: 'warning' },
+  duplicate: { label: 'In several directories', icon: 'copy' },
   'pending-publish': { label: 'Waiting for publish', icon: 'clock' },
 }
 const KIND_ORDER = Object.keys(KIND_GROUPS) as DiffKind[]
@@ -73,12 +76,19 @@ function entryTooltip(entry: DiffEntry) {
     `**${entry.key}** · ${entry.locale} · ${KIND_GROUPS[entry.kind].label}`,
     '',
     `- Locale file: ${quote(entry.local)}`,
-    `- Project: ${quote(entry.platform)}`,
+    `- Remote: ${quote(entry.platform)}`,
   ]
   if (entry.draft !== null && entry.draft !== entry.platform) {
-    lines.push(`- Project draft: ${quote(entry.draft)}`)
+    lines.push(`- Remote draft: ${quote(entry.draft)}`)
   }
   if (entry.base !== null) lines.push(`- Last synced: ${quote(entry.base)}`)
+  if (entry.locations.length > 1) {
+    for (const place of entry.locations) {
+      lines.push(`- ${place.relativePath}: ${quote(place.value)}`)
+    }
+  } else if (entry.kind === 'duplicate') {
+    lines.push(`- No ${entry.locale} text yet in: ${entry.dirs.join(', ')}`)
+  }
   return new vscode.MarkdownString(lines.join('\n'))
 }
 
@@ -131,7 +141,7 @@ class SyncTreeProvider implements vscode.TreeDataProvider<Node> {
     item.contextValue = contextValue('syncEntry', {
       pull: pullable(entry),
       push: pushable(entry),
-      local: entry.local !== null,
+      local: entry.local !== null || entry.locations.length > 0,
       project: entry.onPlatform,
     })
     item.command = {
@@ -198,7 +208,7 @@ export function registerSyncView(
       comparison?.entries.filter((entry) => entry.kind !== 'pending-publish') ??
       []
     const count = entries.length
-    const tooltip = `${count} locale-file ${count === 1 ? 'text differs' : 'texts differ'} from the project`
+    const tooltip = `${count} locale-file ${count === 1 ? 'text differs' : 'texts differ'} from remote`
     view.badge = count > 0 ? { value: count, tooltip } : undefined
     changes.set(
       count,
@@ -207,11 +217,14 @@ export function registerSyncView(
       ).length,
       localOnlyTexts(entries),
     )
+    changes.setDuplicates(duplicateMarks(entries), controller.config?.root)
+    const dirs = new Set(comparison?.files.map((file) => file.dir))
+    view.description = dirs.size > 1 ? [...dirs].join(', ') : undefined
     view.message =
       message ??
       (comparison && comparison.entries.length === 0
-        ? `The locale files match the project's ${comparison.content} text.`
-        : undefined)
+        ? `The locale files match the remote ${comparison.content} text.`
+        : comparison?.warnings.join(' ') || undefined)
   }
 
   const refresh = async () => {
@@ -247,21 +260,20 @@ export function registerSyncView(
 
   const follow = () => {
     const loaded = controller.config
-    const files = loaded?.config.files
-    const dir = files?.dir
-      .replace(/\\/g, '/')
-      .replace(/^\.(\/|$)/, '')
-      .replace(/\/$/, '')
-    const pattern =
-      loaded && files
-        ? `{${dir ? `${dir}/` : ''}**/*.json,${STATE_DIR}/base.json}`
-        : undefined
-    const key = loaded && pattern ? `${loaded.root}|${pattern}` : undefined
+    const dirs = (loaded?.config.files ?? []).map((file) => {
+      const dir = normalizeDir(file.dir).replace(/^\.$/, '')
+      return `${dir ? `${dir}/` : ''}**/*.json`
+    })
+    const pattern = loaded
+      ? `{${[...new Set(dirs), `${STATE_DIR}/base.json`].join(',')}}`
+      : undefined
+    const key =
+      loaded && dirs.length > 0 ? `${loaded.root}|${pattern}` : undefined
     if (key === watched) return
     watcher?.dispose()
     watcher = undefined
     watched = key
-    if (!loaded || !pattern) return
+    if (!loaded || !pattern || !key) return
     watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(loaded.root, pattern),
     )
@@ -299,29 +311,35 @@ export function registerSyncView(
     const { config: loaded, client } = controller
     if (!loaded || !client || entries.length === 0) return
     const overwrites = entries.filter(
-      (entry) => entry.local !== null && !GROUP_PULL_KINDS.has(entry.kind),
+      (entry) =>
+        (entry.local !== null || entry.locations.length > 0) &&
+        !GROUP_PULL_KINDS.has(entry.kind),
     )
     if (overwrites.length > 0) {
       const replace = 'Replace'
       const answer = await vscode.window.showWarningMessage(
         overwrites.length === 1
-          ? `Replace the local text of ${overwrites[0]!.key} (${overwrites[0]!.locale}) with the project's?`
-          : `Replace ${overwrites.length} local texts with the project's?`,
+          ? `Replace the local text of ${overwrites[0]!.key} (${overwrites[0]!.locale}) with the remote text?`
+          : `Replace ${overwrites.length} local texts with the remote text?`,
         { modal: true },
         replace,
       )
       if (answer !== replace) return
     }
     try {
-      const comparison = await compareAgain(loaded, client, entries)
-      const files = await pullLocaleFiles(loaded, comparison, {
+      const compared = await compareAgain(loaded, client, entries)
+      const prune = compared.entries.some(
+        (entry) => entry.kind === 'platform-deleted',
+      )
+      const placed = await placeKeys(loaded, compared, FORCED_PULL_KINDS, false)
+      if (!placed) return
+      const plan = await pullLocaleFiles(loaded, placed.comparison, {
         kinds: FORCED_PULL_KINDS,
-        prune: comparison.entries.some(
-          (entry) => entry.kind === 'platform-deleted',
-        ),
+        prune,
+        into: placed.into,
       })
-      const written = files.filter((file) => file.output !== null)
-      const skipped = files.flatMap((file) => file.skipped)
+      const written = plan.files.filter((file) => file.output !== null)
+      const skipped = plan.files.flatMap((file) => file.skipped)
       if (skipped.length > 0) {
         void vscode.window.showWarningMessage(
           `Localness: ${skipped.join(', ')} would break the structure of the locale files and ${skipped.length === 1 ? 'was' : 'were'} left out.`,
@@ -386,7 +404,7 @@ export function registerSyncView(
         ...lines.slice(0, 12),
         lines.length > 12 ? `… and ${lines.length - 12} more` : '',
         replaced.length > 0
-          ? `\n${replaced.length} of these replace text changed in the project.`
+          ? `\n${replaced.length} of these replace text changed on remote.`
           : '',
         blocked.length > 0 ? `\nLeft out: ${blocked.join('; ')}` : '',
         plan.warnings.length > 0
@@ -403,7 +421,7 @@ export function registerSyncView(
         .join('\n')
       const confirm = 'Push'
       const answer = await vscode.window.showWarningMessage(
-        `Push ${plan.keys.length === 1 ? plan.keys[0]!.key : `${plan.keys.length} keys`} to the project?`,
+        `Push ${plan.keys.length === 1 ? plan.keys[0]!.key : `${plan.keys.length} keys`} to remote?`,
         { modal: true, detail },
         confirm,
       )
@@ -411,7 +429,7 @@ export function registerSyncView(
       const check = await checkPlan(client, plan)
       if (check.expired || check.stale.length > 0) {
         void vscode.window.showWarningMessage(
-          `Localness: the project changed meanwhile (${check.stale.join(', ')}); nothing was pushed.`,
+          `Localness: remote changed meanwhile (${check.stale.join(', ')}); nothing was pushed.`,
         )
         return
       }
@@ -455,9 +473,23 @@ export function registerSyncView(
   }
 
   const openFile = async (entry: DiffEntry) => {
-    const file = provider.comparison?.files.find(
+    const own = (provider.comparison?.files ?? []).filter(
       (one) => one.locale === entry.locale,
     )
+    const holding = own.filter((one) =>
+      entry.locations.some((place) => place.relativePath === one.relativePath),
+    )
+    const candidates =
+      holding.length > 0 ? holding : own.filter((one) => one.source !== null)
+    const file =
+      candidates.length > 1
+        ? (
+            await vscode.window.showQuickPick(
+              candidates.map((one) => ({ label: one.relativePath, file: one })),
+              { placeHolder: `${entry.key} is in several files` },
+            )
+          )?.file
+        : candidates[0]
     if (file) await showKeyInFile(file.path, entry.key)
   }
 
@@ -467,9 +499,9 @@ export function registerSyncView(
     const name = `${entry.key} (${entry.locale})`
     await vscode.commands.executeCommand(
       'vscode.diff',
-      texts.uri(`Project · ${name}`, entry.draft ?? entry.platform),
+      texts.uri(`Remote · ${name}`, entry.draft ?? entry.platform),
       texts.uri(`Locale file · ${name}`, entry.local),
-      `${name}: project ↔ locale file`,
+      `${name}: remote ↔ locale file`,
       { preview: true },
     )
   }

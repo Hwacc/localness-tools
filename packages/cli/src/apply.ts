@@ -59,7 +59,7 @@ export async function runApply(
     throw new Error(
       check.expired
         ? `Plan ${id} expired; run "localness push" again.`
-        : `The project changed since plan ${id} was made (${check.stale.join(', ')}); nothing was written. Run "localness push" again.`,
+        : `Remote changed since plan ${id} was made (${check.stale.join(', ')}); nothing was written. Run "localness push" again.`,
     )
   }
   const result = await applyPush(client, plan, check)

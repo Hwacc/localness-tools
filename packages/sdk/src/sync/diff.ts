@@ -1,7 +1,13 @@
 import type { LocalnessClient } from '../client'
-import type { LoadedConfig, SyncContent } from './config'
-import { readLocalFiles, type LocalLocaleFile } from './local'
+import { requireFiles, type LoadedConfig, type SyncContent } from './config'
+import {
+  readLocalFiles,
+  type LocalKeyLocation,
+  type LocalLocaleFile,
+  type LocalPlacement,
+} from './local'
 import { fetchPlatformTexts, type PlatformTexts } from './platform'
+import { routeKey, unknownNamespaces, type RouteTarget } from './route'
 import { readBase, type BaseTexts } from './state'
 
 /**
@@ -27,6 +33,7 @@ export const DIFF_KINDS = [
   'different',
   'conflict',
   'pending-publish',
+  'duplicate',
 ] as const
 export type DiffKind = (typeof DIFF_KINDS)[number]
 
@@ -41,6 +48,12 @@ export interface DiffEntry {
   base: string | null
   /** Whether the project has the key at all. */
   onPlatform: boolean
+  /** Where a write of this key goes. */
+  target: RouteTarget
+  /** Where this locale has the key now; several when it is in more than one directory. */
+  locations: LocalKeyLocation[]
+  /** Every directory holding the key, in any locale. */
+  dirs: string[]
 }
 
 export interface DiffInput {
@@ -48,6 +61,8 @@ export interface DiffInput {
   local: Record<string, Record<string, string>>
   platform: Pick<PlatformTexts, 'texts' | 'drafts'>
   base: BaseTexts | null
+  placement?: LocalPlacement
+  route?: (key: string, dirs: string[]) => RouteTarget
 }
 
 function classify(
@@ -83,9 +98,11 @@ export function diffLocaleTexts(input: DiffInput): DiffEntry[] {
     const platformTexts = input.platform.texts[locale] ?? {}
     const drafts = input.platform.drafts[locale] ?? {}
     const baseTexts = input.base?.[locale] ?? {}
+    const placed = input.placement?.locations[locale] ?? {}
     const keys = new Set([
       ...Object.keys(localTexts),
       ...Object.keys(platformTexts),
+      ...Object.keys(placed),
     ])
     for (const key of [...keys].sort()) {
       const local = Object.hasOwn(localTexts, key) ? localTexts[key]! : null
@@ -93,7 +110,15 @@ export function diffLocaleTexts(input: DiffInput): DiffEntry[] {
       const platform = onPlatform ? platformTexts[key]! : null
       const draft = onPlatform ? (drafts[key] ?? null) : null
       const base = Object.hasOwn(baseTexts, key) ? baseTexts[key]! : null
-      const kind = classify(local, platform, draft, base, onPlatform)
+      const locations = placed[key] ?? []
+      const dirs = input.placement?.dirs[key] ?? []
+      const split =
+        dirs.length > 1 &&
+        (locations.some((place) => place.value !== locations[0]!.value) ||
+          (locations.length === 0 && platform !== null))
+      const kind = split
+        ? 'duplicate'
+        : classify(local, platform, draft, base, onPlatform)
       if (kind) {
         entries.push({
           locale,
@@ -104,6 +129,12 @@ export function diffLocaleTexts(input: DiffInput): DiffEntry[] {
           draft,
           base,
           onPlatform,
+          target: input.route?.(key, dirs) ?? {
+            dir: dirs[0] ?? null,
+            by: dirs.length > 0 ? 'existing' : 'unrouted',
+          },
+          locations,
+          dirs,
         })
       }
     }
@@ -124,8 +155,12 @@ export interface Comparison {
   locales: string[]
   /** Only these keys were compared; null for all. */
   keys: string[] | null
-  /** The requested locales' files. */
+  /** The requested locales' files, one per configured directory. */
   files: LocalLocaleFile[]
+  /** Where each key is written locally. */
+  placement: LocalPlacement
+  /** Config problems worth telling the person; nothing stops. */
+  warnings: string[]
   /** Per locale, the file's texts in scope; also the source locale's. */
   local: Record<string, Record<string, string>>
   platform: PlatformTexts
@@ -146,26 +181,42 @@ export async function compareLocaleFiles(
     }),
     readBase(loaded),
   ])
-  const read = await readLocalFiles(loaded, Object.keys(platform.texts))
+  const read = await readLocalFiles(loaded, Object.keys(platform.texts), {
+    placementLocales: platform.projectLocales,
+  })
   const only = options.keys && new Set(options.keys)
+  const inScope = <T>(record: Record<string, T>) =>
+    only
+      ? Object.fromEntries(
+          Object.entries(record).filter(([key]) => only.has(key)),
+        )
+      : { ...record }
   const local = Object.fromEntries(
-    read.map((file) => [
-      file.locale,
-      only
-        ? Object.fromEntries(
-            Object.entries(file.content.entries).filter(([key]) =>
-              only.has(key),
-            ),
-          )
-        : { ...file.content.entries },
-    ]),
+    read.locales.map((file) => [file.locale, inScope(file.entries)]),
   )
+  const placement: LocalPlacement = {
+    dirs: read.placement.dirs,
+    locations: Object.fromEntries(
+      Object.entries(read.placement.locations).map(([locale, places]) => [
+        locale,
+        inScope(places),
+      ]),
+    ),
+  }
+  const configured = requireFiles(loaded)
+  const keyPrefix = platform.keyConvention?.prefix ?? ''
+  const unknown = unknownNamespaces(configured, platform.namespaces)
   return {
     sourceLocale: platform.sourceLocale,
     content: loaded.config.content,
     locales: platform.locales,
     keys: options.keys ? [...options.keys] : null,
-    files: read.filter((file) => platform.locales.includes(file.locale)),
+    files: read.files.filter((file) => platform.locales.includes(file.locale)),
+    placement,
+    warnings: unknown.map(
+      (name) =>
+        `files match.namespace "${name}" is not a namespace of the project (it has: ${platform.namespaces.join(', ') || 'none'}).`,
+    ),
     local,
     platform,
     base,
@@ -174,6 +225,13 @@ export async function compareLocaleFiles(
       local,
       platform,
       base,
+      placement,
+      route: (key, dirs) =>
+        routeKey(key, configured, {
+          namespaces: platform.namespaces,
+          keyPrefix,
+          existing: dirs,
+        }),
     }),
   }
 }

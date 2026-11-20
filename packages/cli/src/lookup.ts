@@ -29,9 +29,9 @@ export async function lookupTexts(
   const meta = await client.meta()
   const [local] =
     loaded.config.files && meta.sourceLocale
-      ? await readLocalFiles(loaded, [meta.sourceLocale])
+      ? (await readLocalFiles(loaded, [meta.sourceLocale])).locales
       : []
-  const entries = local?.content.entries ?? {}
+  const entries = local?.entries ?? {}
   const localKeys = matchLocalEntries(
     entries,
     platform.map((match) => match.text),

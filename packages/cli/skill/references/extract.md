@@ -3,7 +3,7 @@
 When a person asks to move hardcoded user-facing text into locale keys:
 
 1. Only look in the files or folders the person named. Skip text that is not shown to users: log messages, ids, CSS classes, URLs, test data, and text already passed to the i18n function.
-2. Run `localness match --json "<text>" "<text>" ...` with every string at once. Keys come from the project (`source: "platform"`) and from the source-locale file when not pushed yet (`source: "local"`). A text with exactly one key reuses it. A text with several keys lists them all for the person to pick; never pick one yourself. Mark local keys in the table, and flag one whose name breaks a strict rule of `convention` (prefix, characters other than letters, digits, `.`, `_`, `-`, or an empty segment): push will block it.
+2. Run `localness match --json "<text>" "<text>" ...` with every string at once. Keys come from remote (`source: "platform"`) and from the source-locale file when not pushed yet (`source: "local"`). A text with exactly one key reuses it. A text with several keys lists them all for the person to pick; never pick one yourself. Mark local keys in the table, and flag one whose name breaks a strict rule of `convention` (prefix, characters other than letters, digits, `.`, `_`, `-`, or an empty segment): push will block it.
 3. Name a key for each text without one, using `convention` and `namespaces` from the same output:
    - With a `prefix`, start the name with it and `separator`. This is required.
    - Prefer `separator`, write each segment in `style` (`snake_case` or `camelCase`; `none` means match the neighbouring keys), and use at most `maxDepth` segments after the prefix. These are suggestions: push still creates a key that misses them and lists it in `warnings`.

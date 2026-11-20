@@ -3,10 +3,9 @@ import { dirname } from 'node:path'
 import {
   unwritableKeys,
   writeLocaleFile,
-  type LocaleFileFormat,
 } from '@localness/contract/locale-file'
-import { requireFiles, type LoadedConfig } from './config'
-import type { Comparison, DiffKind } from './diff'
+import { normalizeDir, type LoadedConfig } from './config'
+import type { Comparison, DiffEntry, DiffKind } from './diff'
 import { writeBase, type BaseTexts } from './state'
 
 /** What `pull` writes: the project's changes, and `different` when there is no base to judge. */
@@ -26,17 +25,24 @@ export const FORCED_PULL_KINDS: readonly DiffKind[] = [
   'local-changed',
   'local-deleted',
   'conflict',
+  'duplicate',
 ]
 
 export interface PullOptions {
-  format: LocaleFileFormat
   kinds: readonly DiffKind[]
   /** Also remove keys the platform does not know. */
   prune?: boolean
+  /**
+   * A configured `dir` for keys that have no place yet: unrouted ones, and
+   * duplicates the project added a locale to. Keys with a place keep it.
+   */
+  into?: string
 }
 
 export interface PullFile {
   locale: string
+  /** Normalized `dir` of the config entry. */
+  dir: string
   path: string
   relativePath: string
   created: boolean
@@ -49,51 +55,103 @@ export interface PullFile {
   output: string | null
 }
 
+export interface PullPlan {
+  files: PullFile[]
+  /** Keys to write that match no directory; pass `into` to place them. */
+  unrouted: DiffEntry[]
+  /** Duplicate keys left alone: their texts differ, or they have no place in this locale. */
+  duplicates: DiffEntry[]
+}
+
 /**
- * The project's text for each entry of `kinds`. Keys the project lacks stay
- * unless `prune`; keys without project text are never touched.
+ * The project's text for each entry of `kinds`, written to every directory
+ * that has the key. Keys the project lacks stay unless `prune`; keys without
+ * project text are never touched.
  */
 export function planPull(
   comparison: Comparison,
   options: PullOptions,
-): PullFile[] {
+): PullPlan {
   const kinds = new Set(options.kinds)
-  const plans: PullFile[] = []
-  for (const file of comparison.files) {
-    const writes: Record<string, string | null> = Object.create(null)
-    for (const entry of comparison.entries) {
-      if (entry.locale !== file.locale) continue
-      if (kinds.has(entry.kind) && entry.platform !== null) {
-        writes[entry.key] = entry.platform
-      } else if (!entry.onPlatform && options.prune) {
-        writes[entry.key] = null
-      }
+  const into =
+    options.into === undefined ? undefined : normalizeDir(options.into)
+  if (
+    into !== undefined &&
+    !comparison.files.some((file) => file.dir === into)
+  ) {
+    const dirs = [...new Set(comparison.files.map((file) => file.dir))]
+    throw new Error(
+      `"${options.into}" is not a configured directory; the config has ${dirs.join(', ')}.`,
+    )
+  }
+  const writes = new Map<string, Record<string, string | null>>()
+  const unrouted: DiffEntry[] = []
+  const duplicates: DiffEntry[] = []
+  const put = (
+    entry: DiffEntry,
+    dirs: readonly string[],
+    text: string | null,
+  ) => {
+    for (const dir of dirs) {
+      const id = `${entry.locale}\0${dir}`
+      const own = writes.get(id) ?? Object.create(null)
+      own[entry.key] = text
+      writes.set(id, own)
     }
+  }
+
+  for (const entry of comparison.entries) {
+    if (!entry.onPlatform && options.prune) {
+      put(
+        entry,
+        entry.locations.map((place) => place.dir),
+        null,
+      )
+      continue
+    }
+    const wanted = kinds.has(entry.kind) && entry.platform !== null
+    let dirs: readonly string[] = []
+    if (wanted && entry.locations.length > 0) {
+      dirs = entry.locations.map((place) => place.dir)
+    } else if (wanted && entry.dirs.length === 1) {
+      dirs = entry.dirs
+    } else if (wanted && entry.dirs.length === 0 && entry.target.dir !== null) {
+      dirs = [entry.target.dir]
+    } else if (wanted && into !== undefined) {
+      dirs = [into]
+    }
+    if (dirs.length > 0) put(entry, dirs, entry.platform)
+    else if (entry.kind === 'duplicate') duplicates.push(entry)
+    else if (wanted) unrouted.push(entry)
+  }
+  const files: PullFile[] = []
+  for (const file of comparison.files) {
+    const own = writes.get(`${file.locale}\0${file.dir}`)
+    if (!own) continue
     const skipped = [
       ...unwritableKeys(
         file.content,
-        Object.keys(writes).filter((key) => writes[key] !== null),
-        options.format,
+        Object.keys(own).filter((key) => own[key] !== null),
+        file.format,
       ),
     ].sort()
-    for (const key of skipped) delete writes[key]
-    const keys = Object.keys(writes)
+    for (const key of skipped) delete own[key]
+    const keys = Object.keys(own)
     if (keys.length === 0 && skipped.length === 0) continue
-    plans.push({
+    files.push({
       locale: file.locale,
+      dir: file.dir,
       path: file.path,
       relativePath: file.relativePath,
       created: file.source === null && keys.length > 0,
-      set: keys.filter((key) => writes[key] !== null),
-      removed: keys.filter((key) => writes[key] === null),
+      set: keys.filter((key) => own[key] !== null),
+      removed: keys.filter((key) => own[key] === null),
       skipped,
       output:
-        keys.length > 0
-          ? writeLocaleFile(file.source, writes, options.format)
-          : null,
+        keys.length > 0 ? writeLocaleFile(file.source, own, file.format) : null,
     })
   }
-  return plans
+  return { files, unrouted, duplicates }
 }
 
 export async function applyPull(files: readonly PullFile[]) {
@@ -111,18 +169,14 @@ export async function applyPull(files: readonly PullFile[]) {
 export async function pullLocaleFiles(
   loaded: LoadedConfig,
   comparison: Comparison,
-  options: Omit<PullOptions, 'format'> & { dryRun?: boolean },
-) {
-  const files = planPull(comparison, {
-    format: requireFiles(loaded).format,
-    kinds: options.kinds,
-    prune: options.prune,
-  })
+  options: PullOptions & { dryRun?: boolean },
+): Promise<PullPlan> {
+  const plan = planPull(comparison, options)
   if (!options.dryRun) {
-    await applyPull(files)
-    await writeBase(loaded, recordPull(comparison, files))
+    await applyPull(plan.files)
+    await writeBase(loaded, recordPull(comparison, plan.files))
   }
-  return files
+  return plan
 }
 
 /**
@@ -138,10 +192,13 @@ export function recordPull(
   const only = comparison.keys && new Set(comparison.keys)
   for (const locale of comparison.locales) {
     const platform = comparison.platform.texts[locale] ?? {}
+    const placed = comparison.placement.locations[locale] ?? {}
     const after = { ...comparison.local[locale] }
-    const file = files.find((item) => item.locale === locale && item.output)
-    for (const key of file?.set ?? []) after[key] = platform[key]!
-    for (const key of file?.removed ?? []) delete after[key]
+    for (const file of files) {
+      if (file.locale !== locale || file.output === null) continue
+      for (const key of file.set) after[key] = platform[key]!
+      for (const key of file.removed) delete after[key]
+    }
     const texts = { ...next[locale] }
     const keys = new Set([
       ...Object.keys(after),
@@ -152,7 +209,9 @@ export function recordPull(
       const local = Object.hasOwn(after, key) ? after[key]! : null
       const onPlatform = Object.hasOwn(platform, key)
       if (local !== null && local === platform[key]) texts[key] = local
-      else if (local === null && !onPlatform) delete texts[key]
+      else if (local === null && !onPlatform && !placed[key]?.length) {
+        delete texts[key]
+      }
     }
     if (Object.keys(texts).length > 0) next[locale] = texts
     else delete next[locale]

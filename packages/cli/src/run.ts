@@ -23,13 +23,13 @@ Usage: localness <command> [options]
 
 Commands:
   init                 Find the repository's locale files and write localness.config.json
-  diff                 Compare the locale files with the project (exit 1 when they differ)
-  pull                 Write the project's changes into the locale files
-  push                 Plan sending local changes to the project; writes nothing
-  apply <id>           Write a plan to the project (no id: list plans)
-  sync                 pull the project's changes, then plan a push of local ones
+  diff                 Compare the locale files with remote (exit 1 when they differ)
+  pull                 Write remote changes into the locale files
+  push                 Plan sending local changes to remote; writes nothing
+  apply <id>           Write a plan to remote (no id: list plans)
+  sync                 pull remote changes, then plan a push of local ones
   match <text...>      Existing keys whose source text equals each text
-  suggest-name <text>  Ask the project's AI for a key name; writes nothing
+  suggest-name <text>  Ask Localness AI for a key name; writes nothing
   review start <file>  Open a page to decide, per extracted text, which key it
                        gets (reuse, new or skip): in the editor when the
                        Localness extension has the project open, else the browser
@@ -45,8 +45,9 @@ Options:
   --config <path>      Config file (default: nearest localness.config.json)
   --keys <a,b>         Only these keys; for pull and push, take that side even
                        when both changed
-  --locales <en,ja>    Only these platform locales
-  --prune              Also remove keys the project does not have (pull)
+  --locales <en,ja>    Only these project locales
+  --prune              Also remove keys remote does not have (pull)
+  --into <dir>         Configured directory for keys with no place yet (pull, sync)
   --dry-run            Show what would happen (init, pull, push, sync, skill)
   --json               Machine-readable output
   --base-url <url>     Localness instance URL (init)

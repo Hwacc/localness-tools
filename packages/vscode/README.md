@@ -6,11 +6,11 @@ Shows Localness translation keys where you use them, edits their translations an
 
 - **Hover**: source and display-locale text with state badges (`Published`, `Edited`, `Outdated`, `Not published`), plus copy, open in Localness and edit.
 - **Inline hints**: show the translation after the key or in place of it (`Localness: Switch inline hint mode`). Known keys are underlined.
-- **Diagnostics**: warns on keys missing from the project. Keys only in the locale files count as known and can be pushed from the hover.
+- **Diagnostics**: warns on keys missing from remote. Keys only in the locale files count as known and can be pushed from the hover.
 - **Edit translations**: saved as drafts; publish them in Localness. Concurrent edits are never overwritten.
 - **Extract hardcoded text**: turn a selected string into a key, reusing a key with the same text or naming a new one (checked against the key convention, with optional AI suggestions). The code is rewritten per `extractTemplates`.
 - **Keys view**: keys by namespace with state icons; find usages, open the locale file, edit, copy, or push local-only keys. Filter by release.
-- **Local Files view**: differences between the locale files and the project, with compare, pull and push. Extracted and edited keys are also written to the locale files, following `content` in `localness.config.json`.
+- **Local Files view**: differences between the locale files and remote, with compare, pull and push. Extracted and edited keys are also written to the locale files, following `content` in `localness.config.json`.
 - **Releases**: pick the release new keys are labelled with, and edit the labels of existing keys.
 - **Search** (`Localness: Search keys`): by key name or source text.
 - **Status bar**: display locale, release and local changes in one item, with quick switches.
@@ -19,6 +19,16 @@ Shows Localness translation keys where you use them, edits their translations an
 Editing, extracting and pushing need a Read & write token.
 
 Only the source locale and the display locale are downloaded. Data is kept in memory and cached under the extension's global storage; the cache is shown immediately and refreshed in the background, when the window regains focus, and on `Localness: Refresh`. The cache can contain draft text.
+
+## Terms
+
+- **remote**: the texts of the configured project on the Localness instance.
+- **local**: the locale files in the workspace.
+- **project**: the Localness project named in `localness.config.json`.
+- **Localness**: the product and the instance you sign in to.
+- **locale**: a language, such as `en` or `ja`.
+
+Identifiers such as view context values and the CLI's `--json` fields (`platform`, `onPlatform`, `platform-added` …) keep the name `platform`; it means remote.
 
 ## Getting started
 

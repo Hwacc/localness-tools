@@ -44,10 +44,10 @@ const LOCAL_LINKS = (key: string) => ({
   title: [commandLink('$(copy)', 'localness.copyKey', { key }, 'Copy key')],
   footer: [
     commandLink(
-      '$(cloud-upload) Push to Localness',
+      '$(cloud-upload) Push to remote',
       'localness.sync.pushKey',
       key,
-      'Create the key in Localness from the locale files',
+      'Create the key on remote from the locale files',
     ),
   ],
 })
