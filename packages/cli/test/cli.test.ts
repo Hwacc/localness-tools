@@ -8,7 +8,7 @@ import { groupLocaleFiles, matchLocales } from '../src/init'
 import { parseEnvFile } from '../src/env'
 import { run } from '../src/run'
 import { clientOf } from '../src/shared'
-import { skillDirsFor } from '../src/skill'
+import { GLOBAL_SKILLS, skillDirsFor } from '../src/skill'
 
 const BASE_URL = 'https://localness.example.com'
 
@@ -217,6 +217,7 @@ describe('commands', () => {
       stdout: (text) => out.push(text),
       stderr: (text) => err.push(text),
       fetch,
+      home: join(root, 'home'),
     })
   }
 
@@ -405,6 +406,23 @@ describe('commands', () => {
       '{\n  "title": "主页"\n}\n',
     )
     expect(await cli(['diff'], fetch)).toBe(0)
+  })
+
+  it('diff --json names the config it used, relative to the working directory', async () => {
+    for (const app of ['web', 'admin']) {
+      await put(
+        `apps/${app}/localness.config.json`,
+        JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+      )
+      await put(`apps/${app}/locales/en.json`, '{ "title": "Home" }')
+    }
+    const fetch = platform({ title: { en: 'Home' } })
+    const config = join(root, 'apps', 'web', 'localness.config.json')
+
+    expect(await cli(['diff', '--json', '--config', config], fetch)).toBe(0)
+    expect(JSON.parse(out.join('')).config).toBe(
+      'apps/web/localness.config.json',
+    )
   })
 
   it('sync pulls the project changes and plans local ones for apply', async () => {
@@ -654,6 +672,7 @@ describe('commands', () => {
         env: {},
         stdout: (text) => out.push(text),
         stderr: (text) => err.push(text),
+        home: join(root, 'home'),
       })
 
     expect(await install(), err.join('')).toBe(0)
@@ -730,9 +749,59 @@ describe('commands', () => {
     await cli(['diff', '--config', 'app/localness.config.json'], platform({}))
     expect(err.join('')).toMatch(/is for CLI 0\.0\.1.*--root app/)
   })
+
+  it('skill install --global writes into the home folder', async () => {
+    await mkdir(join(root, '.git'))
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    const skill = join(root, 'home/.cursor/skills/localness/SKILL.md')
+    expect(
+      await cli(
+        ['skill', 'install', '--global', '--agent', 'cursor'],
+        platform({}),
+      ),
+      err.join(''),
+    ).toBe(0)
+    expect(out.join('')).toContain(
+      join('~', '.cursor/skills/localness/SKILL.md'),
+    )
+    const text = await readFile(skill, 'utf8')
+    expect(text).toMatch(/^name: localness$/m)
+    await expect(
+      readFile(join(root, '.claude/skills/localness/SKILL.md')),
+    ).rejects.toThrow()
+
+    await writeFile(
+      skill,
+      text.replace(/localness-cli: '[^']*'/, "localness-cli: '0.0.1'"),
+    )
+    await cli(['diff'], platform({}))
+    expect(err.join('')).toMatch(/is for CLI 0\.0\.1.*install --global/)
+  })
+
+  it('skill install --global refuses --root and --agents-md', async () => {
+    for (const flag of ['--root', '--agents-md']) {
+      const args = flag === '--root' ? [flag, 'app'] : [flag]
+      err.length = 0
+      expect(
+        await cli(['skill', 'install', '--global', ...args], platform({})),
+      ).toBe(2)
+      expect(err.join('')).toContain(`--global cannot be combined with ${flag}`)
+    }
+  })
 })
 
 describe('skillDirsFor', () => {
+  it('picks the fewest home folders the agents read', () => {
+    expect(skillDirsFor(['cursor'], GLOBAL_SKILLS)).toEqual(['.cursor/skills'])
+    expect(
+      skillDirsFor(['copilot', 'claude', 'cursor'], GLOBAL_SKILLS),
+    ).toEqual(['.claude/skills', '.copilot/skills'])
+    expect(skillDirsFor(['codex'], GLOBAL_SKILLS)).toEqual(['.agents/skills'])
+  })
+
   it('picks the fewest folders the agents read', () => {
     expect(skillDirsFor(['copilot', 'claude', 'cursor'])).toEqual([
       '.claude/skills',

@@ -11,6 +11,7 @@ import {
 } from '@localness/sdk/sync'
 import {
   EXIT_ERROR,
+  configField,
   loadProject,
   plural,
   type CliIo,
@@ -67,7 +68,13 @@ export async function runApply(
   await writeBase(loaded, recordPush(await readBase(loaded), plan, result))
 
   if (values.json) {
-    io.stdout(`${JSON.stringify({ id, ...result }, null, 2)}\n`)
+    io.stdout(
+      `${JSON.stringify(
+        { config: configField(io, loaded), id, ...result },
+        null,
+        2,
+      )}\n`,
+    )
   } else {
     for (const done of result.written) {
       const parts = [

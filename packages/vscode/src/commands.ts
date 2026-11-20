@@ -4,6 +4,7 @@ import { createClient } from '@localness/sdk'
 import { CONFIG_FILE_NAME, writeConfigFields } from '@localness/sdk/sync'
 import { findProjectConfig, tokenKey, type DataController } from './controller'
 import type { LocalChanges } from './localChanges'
+import { switchConfig, type WorkspaceConfigs } from './configs'
 import { projectSetting } from './core/data'
 import { describeError } from './core/errors'
 import { localeIcon, localeName } from './core/locales'
@@ -42,8 +43,10 @@ async function pickProject(
 }
 
 /** The config file to use, or where to create one: the active file's workspace folder. */
-async function configPath(): Promise<string | undefined> {
-  const found = await findProjectConfig()
+async function configPath(
+  controller: DataController,
+): Promise<string | undefined> {
+  const found = controller.configPath ?? (await findProjectConfig())
   if (found) return found
   const folders = vscode.workspace.workspaceFolders ?? []
   const uri = vscode.window.activeTextEditor?.document.uri
@@ -69,7 +72,7 @@ async function signIn(
   controller: DataController,
   secrets: vscode.SecretStorage,
 ) {
-  const path = await configPath()
+  const path = await configPath(controller)
   if (!path) return
   const current =
     controller.config?.path === path ? controller.config.config : undefined
@@ -109,7 +112,7 @@ async function signIn(
     )
     return
   }
-  await controller.reload(true)
+  await controller.useConfig(path, true)
   void vscode.window.showInformationMessage(
     `Localness: signed in. The project is saved in ${vscode.workspace.asRelativePath(path)}.`,
   )
@@ -218,9 +221,9 @@ function radio(selected: boolean) {
   return selected ? '$(pass-filled)' : '$(circle-large-outline)'
 }
 
-function accountItems(): MenuItem[] {
+function accountItems(configs: WorkspaceConfigs): MenuItem[] {
   const run = (command: string) => () => vscode.commands.executeCommand(command)
-  return [
+  const items: MenuItem[] = [
     {
       label: '$(project) Select project',
       run: run('localness.selectProject'),
@@ -228,11 +231,19 @@ function accountItems(): MenuItem[] {
     { label: '$(key) Sign in', run: run('localness.signIn') },
     { label: '$(sign-out) Sign out', run: run('localness.signOut') },
   ]
+  if (configs.uris.length > 1) {
+    items.unshift({
+      label: '$(gear) Switch config',
+      run: run('localness.switchConfig'),
+    })
+  }
+  return items
 }
 
 function showMenu(
   controller: DataController,
   changes: LocalChanges,
+  configs: WorkspaceConfigs,
   extensionUri: vscode.Uri,
 ) {
   const { status, data } = controller
@@ -260,7 +271,7 @@ function showMenu(
     pick.title = back ? `${title} · Project and account` : title
     pick.placeholder = back ? '' : placeholder
     pick.buttons = back ? [vscode.QuickInputButtons.Back] : []
-    pick.items = accountItems()
+    pick.items = accountItems(configs)
   }
 
   const showMain = () => {
@@ -294,6 +305,14 @@ function showMenu(
         label: `$(git-compare) ${changes.count} local ${changes.count === 1 ? 'change' : 'changes'}`,
         description: 'Open Local Files',
         run: command('localness.sync.focus'),
+      })
+    }
+    const configDir = configs.describe(controller.configPath)
+    if (configDir) {
+      status.push({
+        label: `$(gear) Config: ${configDir}`,
+        description: 'Switch config',
+        run: command('localness.switchConfig'),
       })
     }
     pick.items = [
@@ -343,6 +362,7 @@ export function registerCommands(
   controller: DataController,
   matcher: KeyMatcher,
   changes: LocalChanges,
+  configs: WorkspaceConfigs,
   { secrets, extensionUri }: vscode.ExtensionContext,
 ): vscode.Disposable {
   const register = vscode.commands.registerCommand
@@ -380,8 +400,9 @@ export function registerCommands(
     register('localness.refresh', () => controller.reload(true)),
     register('localness.searchKeys', () => searchKeys(controller)),
     register('localness.showMenu', () =>
-      showMenu(controller, changes, extensionUri),
+      showMenu(controller, changes, configs, extensionUri),
     ),
+    register('localness.switchConfig', () => switchConfig(controller, configs)),
     register(
       'localness.openKey',
       async (arg: number | { state?: { id?: unknown } }) => {

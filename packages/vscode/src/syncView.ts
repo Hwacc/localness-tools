@@ -23,6 +23,7 @@ import {
 } from '@localness/sdk/sync'
 import type { LocalnessClient } from '@localness/sdk'
 import type { DataController } from './controller'
+import type { WorkspaceConfigs } from './configs'
 import { describeError } from './core/errors'
 import { placeKeys, showKeyInFile } from './localFiles'
 import { localOnlyTexts, truncate } from './core/keys'
@@ -191,6 +192,7 @@ function runInTerminal(cwd: string, args: string) {
 export function registerSyncView(
   controller: DataController,
   changes: LocalChanges,
+  configs: WorkspaceConfigs,
 ) {
   const provider = new SyncTreeProvider()
   const texts = new TextProvider()
@@ -202,6 +204,13 @@ export function registerSyncView(
   let generation = 0
   let watcher: vscode.FileSystemWatcher | undefined
   let watched: string | undefined
+  let localeDirs: string | undefined
+  const describe = () => {
+    view.description =
+      [configs.describe(controller.config?.path), localeDirs]
+        .filter(Boolean)
+        .join(' · ') || undefined
+  }
   const show = (comparison: Comparison | undefined, message?: string) => {
     provider.update(comparison)
     const entries =
@@ -219,7 +228,8 @@ export function registerSyncView(
     )
     changes.setDuplicates(duplicateMarks(entries), controller.config?.root)
     const dirs = new Set(comparison?.files.map((file) => file.dir))
-    view.description = dirs.size > 1 ? [...dirs].join(', ') : undefined
+    localeDirs = dirs.size > 1 ? [...dirs].join(', ') : undefined
+    describe()
     view.message =
       message ??
       (comparison && comparison.entries.length === 0
@@ -517,6 +527,7 @@ export function registerSyncView(
 
   const onChange = () => {
     follow()
+    describe()
     schedule()
   }
   onChange()
@@ -524,6 +535,7 @@ export function registerSyncView(
     view,
     vscode.workspace.registerTextDocumentContentProvider(TEXT_SCHEME, texts),
     controller.onDidChange(onChange),
+    configs.onDidChange(describe),
     vscode.commands.registerCommand('localness.sync.refresh', refresh),
     vscode.commands.registerCommand('localness.sync.pull', (node?: Node) =>
       pull(nodeEntries(node, PULL_KINDS, pullable)),

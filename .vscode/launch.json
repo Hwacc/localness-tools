@@ -17,6 +17,16 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode"
       ],
       "outFiles": ["${workspaceFolder}/packages/vscode/dist/**/*.cjs"]
+    },
+    {
+      "name": "Run Extension in Workspace…",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "${input:workspaceFile}",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode"
+      ],
+      "outFiles": ["${workspaceFolder}/packages/vscode/dist/**/*.cjs"]
     }
   ],
   "inputs": [
@@ -25,6 +35,11 @@
       "type": "promptString",
       "description": "Folder to open in the Extension Development Host",
       "default": "${workspaceFolder}/playground"
+    },
+    {
+      "id": "workspaceFile",
+      "type": "promptString",
+      "description": "Path of the .code-workspace file to open in the Extension Development Host"
     }
   ]
 }

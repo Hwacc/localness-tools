@@ -13,6 +13,8 @@ import { registerTree } from './tree'
 import { registerReleases } from './releases'
 import { registerReview } from './review'
 import { LocalChanges } from './localChanges'
+import { WorkspaceConfigs } from './configs'
+import { affectsActiveConfig } from './core/configs'
 
 const FOCUS_DEBOUNCE_MS = 1500
 const FOCUS_MIN_INTERVAL_MS = 30_000
@@ -25,7 +27,19 @@ export function activate(context: vscode.ExtensionContext) {
   const configWatcher = vscode.workspace.createFileSystemWatcher(
     `**/${CONFIG_FILE_NAME}`,
   )
-  const reloadConfig = () => void controller.reload()
+  const configs = new WorkspaceConfigs()
+  const onConfigFile = (deleted: boolean) => (uri: vscode.Uri) => {
+    void configs.refresh()
+    if (!affectsActiveConfig(uri.fsPath, controller.configPath)) return
+    void (deleted ? controller.useConfig(undefined) : controller.reload())
+  }
+  const onFoldersChange = () => {
+    void configs.refresh()
+    const active = controller.configPath
+    const kept =
+      active && vscode.workspace.getWorkspaceFolder(vscode.Uri.file(active))
+    void (kept ? controller.reload() : controller.useConfig(undefined))
+  }
   let focusTimer: ReturnType<typeof setTimeout> | undefined
   let lastRefresh = Date.now()
 
@@ -35,21 +49,22 @@ export function activate(context: vscode.ExtensionContext) {
     matcher,
     changes,
     configWatcher,
-    configWatcher.onDidCreate(reloadConfig),
-    configWatcher.onDidChange(reloadConfig),
-    configWatcher.onDidDelete(reloadConfig),
+    configs,
+    configWatcher.onDidCreate(onConfigFile(false)),
+    configWatcher.onDidChange(onConfigFile(false)),
+    configWatcher.onDidDelete(onConfigFile(true)),
     vscode.window.onDidChangeActiveTextEditor(
       () => void controller.followEditor(),
     ),
-    vscode.workspace.onDidChangeWorkspaceFolders(reloadConfig),
-    registerStatusBar(controller, changes),
-    registerSyncView(controller, changes),
-    registerTree(controller, changes, context),
+    vscode.workspace.onDidChangeWorkspaceFolders(onFoldersChange),
+    registerStatusBar(controller, changes, configs),
+    registerSyncView(controller, changes, configs),
+    registerTree(controller, changes, context, configs),
     registerReleases(controller),
     registerHover(controller, matcher, changes),
     registerInlineHints(controller, matcher, changes),
     registerDiagnostics(controller, matcher, changes),
-    registerCommands(controller, matcher, changes, context),
+    registerCommands(controller, matcher, changes, configs, context),
     registerExtractText(controller, matcher),
     registerReview(controller, log),
     context.secrets.onDidChange((event) => {
@@ -73,4 +88,5 @@ export function activate(context: vscode.ExtensionContext) {
   )
 
   void controller.reload()
+  void configs.refresh()
 }

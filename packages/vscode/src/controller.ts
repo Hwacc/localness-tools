@@ -13,6 +13,7 @@ import {
   type LoadedConfig,
 } from '@localness/sdk/sync'
 import { buildProjectData, resolveLocales, type ProjectData } from './core/data'
+import { configToFollow } from './core/configs'
 import { describeError } from './core/errors'
 import { buildIndex, replaceKeyState } from './core/keys'
 import { trimBaseUrl } from './core/urls'
@@ -49,6 +50,7 @@ export class DataController implements vscode.Disposable {
   readonly onDidChange = this.#changed.event
   readonly #store: FileStore
   #generation = 0
+  #following = 0
   #status: Status = { kind: 'unconfigured', message: 'Not configured' }
   #data: ProjectData | undefined
   #client: LocalnessClient | undefined
@@ -80,9 +82,29 @@ export class DataController implements vscode.Disposable {
     return this.#client?.baseUrl ?? this.#config?.config.baseUrl ?? ''
   }
 
-  /** Reloads when the active file now falls under another config file. */
+  /** Switches to the config above the active file, if it is a workspace file under another config. */
   async followEditor() {
-    if ((await findProjectConfig()) !== this.#configPath) await this.reload()
+    const uri = vscode.window.activeTextEditor?.document.uri
+    if (uri?.scheme !== 'file' || !vscode.workspace.getWorkspaceFolder(uri)) {
+      return
+    }
+    const run = ++this.#following
+    const next = configToFollow(
+      await findConfigFile(dirname(uri.fsPath)),
+      this.#configPath,
+    )
+    if (next && run === this.#following) await this.useConfig(next)
+  }
+
+  /** The config file in use, also when it failed to load. */
+  get configPath() {
+    return this.#configPath
+  }
+
+  /** Loads `path`; undefined finds the config again from the active file. */
+  useConfig(path: string | undefined, force = false) {
+    this.#configPath = path
+    return this.reload(force)
   }
 
   #clear(status: Status) {
@@ -98,8 +120,10 @@ export class DataController implements vscode.Disposable {
 
     let loaded: LoadedConfig | undefined
     try {
-      this.#configPath = await findProjectConfig()
-      loaded = this.#configPath ? await loadConfig(this.#configPath) : undefined
+      const path = this.#configPath ?? (await findProjectConfig())
+      if (stale()) return
+      this.#configPath = path
+      loaded = path ? await loadConfig(path) : undefined
     } catch (error) {
       if (stale()) return
       this.#config = undefined

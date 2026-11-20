@@ -9,6 +9,8 @@
 7. Only after the person approves, run `localness apply <id>`. If it reports the plan stale or expired, nothing was written: run `diff` again and start over; never retry the same id.
 8. Report what was written, and that drafts wait for a publish in the web app.
 
+With several `localness.config.json` files, do these steps once per config the task touches, from that config's folder or with `--config <path>`. Plans live in that config's `.localness/plans/`, so run `apply <id>` with the same config; the `config` field of `push --json` and `apply --json` must match.
+
 `localness sync` does steps 4 and 5 together for the unambiguous kinds. `--dry-run` previews `pull`, `push` and `sync`.
 
 | `kind`             | Meaning                                                                                | Action                                                                                 |

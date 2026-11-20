@@ -53,6 +53,12 @@
         "category": "Localness"
       },
       {
+        "command": "localness.switchConfig",
+        "title": "Switch config",
+        "category": "Localness",
+        "icon": "$(gear)"
+      },
+      {
         "command": "localness.switchDisplayLocale",
         "title": "Switch display locale",
         "category": "Localness",

@@ -46,7 +46,7 @@ Sign in writes the base URL and project to `localness.config.json` in the worksp
 }
 ```
 
-The extension uses the nearest `localness.config.json` at or above the active file, else the one at or above the first workspace folder, so each package of a monorepo can point at its own project.
+The extension uses the nearest `localness.config.json` at or above the active file, else the one at or above the first workspace folder, so each package of a monorepo can point at its own project. Focusing something that is not a workspace file, or a file with no config above it, keeps the current config. The status bar tooltip shows which config is active; with several, the Keys and Local Files views show its folder and `Localness: Switch config` picks another. Diagnostics only cover files under the active config's folder.
 
 ## Project configuration (`localness.config.json`)
 

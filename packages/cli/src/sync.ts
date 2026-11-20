@@ -7,6 +7,7 @@ import { describePull, needsPerson, pullInto, pullJson } from './pull'
 import { describePush, planPushFrom, pushJson } from './push'
 import {
   EXIT_DIFFERENT,
+  configField,
   list,
   loadProject,
   printWarnings,
@@ -36,7 +37,11 @@ export async function runSync(io: CliIo, values: CliValues) {
   if (values.json) {
     io.stdout(
       `${JSON.stringify(
-        { pull: pullJson(pulled, dryRun), push: pushJson(pushed) },
+        {
+          config: configField(io, loaded),
+          pull: pullJson(pulled, dryRun),
+          push: pushJson(pushed),
+        },
         null,
         2,
       )}\n`,

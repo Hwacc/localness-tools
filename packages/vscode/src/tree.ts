@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import type { DeliveryKeyState } from '@localness/sdk'
 import type { DataController } from './controller'
+import type { WorkspaceConfigs } from './configs'
 import { groupByNamespace, type KeyGroup } from './core/namespaces'
 import { STATE_ICONS, stateFor, truncate, textFor } from './core/keys'
 import { filterByRelease, type ReleaseFilter } from './core/releases'
@@ -110,6 +111,7 @@ export function registerTree(
   controller: DataController,
   changes: LocalChanges,
   context: vscode.ExtensionContext,
+  configs: WorkspaceConfigs,
 ): vscode.Disposable {
   const provider = new KeyTreeProvider(controller, changes)
   provider.filter = context.workspaceState.get<ReleaseFilter>(FILTER_STATE)
@@ -124,12 +126,16 @@ export function registerTree(
       controller.data !== undefined,
     )
     const { filter } = provider
-    view.description =
+    const release =
       filter === undefined
         ? undefined
         : filter === 'unassigned'
           ? 'No release'
           : (controller.data?.releaseNames.get(filter) ?? `release ${filter}`)
+    view.description =
+      [configs.describe(controller.config?.path), release]
+        .filter(Boolean)
+        .join(' · ') || undefined
     provider.refresh()
   }
   const pickFilter = async () => {
@@ -158,6 +164,7 @@ export function registerTree(
   return vscode.Disposable.from(
     view,
     controller.onDidChange(sync),
+    configs.onDidChange(sync),
     changes.onDidChange(() => provider.refresh()),
     vscode.commands.registerCommand(
       'localness.filterKeysByRelease',

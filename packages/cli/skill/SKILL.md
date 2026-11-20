@@ -10,6 +10,10 @@ metadata:
 
 The locale JSON files in this repository are synced with a Localness project. The `localness` CLI is the only way to move text between them; if it is not on PATH, run `npx @localness/cli` instead. Each command uses the nearest `localness.config.json` above the working directory, so run it from the package that owns the config. That file names the locale directories (`files` is one directory or a list), their layout and the project. "Remote" means that project's texts on the Localness instance, "local" the locale files; in JSON output `platform` (as in `platform-added` or `onPlatform`) means remote.
 
+## Several configs
+
+A repository may have several `localness.config.json` files (one per package or app). Use the one nearest the files you change: run the CLI from its folder, or pass `--config <path>`. If unsure, list the config files first. Each config has its own token (`.env.local`), `.localness/` (base, plans, review input) and project. For a task across packages, run `diff`, `pull` and `push` per config and show each plan separately; `apply <id>` must use the config that made the plan. Every `--json` output names its `config`: check it.
+
 ## Rules
 
 - Write to remote only with `localness apply <id>`, and only after a person approved that plan in this conversation. Never write through the HTTP API, an MCP server or the web app.

@@ -82,7 +82,7 @@ The base (`.localness/base.json`, next to the config) is the last text the file 
 | `--locales <en,ja>`    | diff, pull, push, sync                | Only these project locales.                                                                                                 |
 | `--prune`              | pull                                  | Also remove keys remote does not have.                                                                                      |
 | `--dry-run`            | init, pull, push, sync, skill install | Show what would happen.                                                                                                     |
-| `--json`               | all                                   | Machine-readable output on stdout.                                                                                          |
+| `--json`               | all                                   | Machine-readable output on stdout. For `diff`, `pull`, `push`, `sync` and `apply <id>` it names the `config` file used.     |
 | `--base-url <url>`     | init                                  | Localness instance URL. Required.                                                                                           |
 | `--project <name\|id>` | init                                  | Project. Default: the token's only project.                                                                                 |
 | `--dir <path>`         | init                                  | Locale directory, skipping detection.                                                                                       |
@@ -93,6 +93,7 @@ The base (`.localness/base.json`, next to the config) is the last text the file 
 | `--agent <a,b>`        | skill install                         | `copilot`, `claude`, `cursor`, `codex` or `all`. Default: the first three.                                                  |
 | `--agents-md`          | skill install                         | Also add a block pointing to the Skill in the root `AGENTS.md`.                                                             |
 | `--root <path>`        | skill install                         | Install here instead of the git root, for a folder opened on its own.                                                       |
+| `--global`             | skill install                         | Install in your home folder, for every repository. Not with `--root` or `--agents-md`.                                      |
 | `--release <name>`     | init                                  | Release new keys are labelled with.                                                                                         |
 | `--none`               | releases use                          | No release for new keys.                                                                                                    |
 | `--use`                | releases create                       | Also make the new release the config's.                                                                                     |
@@ -121,6 +122,22 @@ Writes (`apply`) are labeled in the key history on remote as `cli/<version>`, or
 It writes as few copies as cover the chosen agents, since an agent reading two copies lists the skill twice: the default (Copilot, Claude Code, Cursor) is the single `.claude/skills/localness/SKILL.md`. Claude Code and Codex share no folder, so `--agent all` writes two. Copies already installed in any of these folders are updated too.
 
 `SKILL.md` records the CLI version and a hash over every file of the Skill. Reinstalling leaves a copy with any hand-edited file alone unless `--force`. `diff`, `pull`, `push`, `apply` and `sync` print a note on stderr when the installed Skill is from another CLI version. Project-specific conventions belong in the Skills page in Localness, not in this file.
+
+To give your agents the Skill in every repository without committing it, install it once in your home folder:
+
+```sh
+localness skill install --global                 # Copilot, Claude Code, Cursor
+localness skill install --global --agent codex
+```
+
+| Agent          | Reads skills from (home folder)                                               |
+| -------------- | ----------------------------------------------------------------------------- |
+| GitHub Copilot | `~/.copilot/skills`, `~/.agents/skills`                                       |
+| Claude Code    | `~/.claude/skills`                                                            |
+| Cursor         | `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills` |
+| Codex          | `~/.agents/skills`                                                            |
+
+The same rule picks the fewest copies: the default writes `~/.claude/skills/localness` (Claude Code, Cursor) and `~/.copilot/skills/localness` (Copilot). `--global` leaves `AGENTS.md` alone and cannot be combined with `--root` or `--agents-md`; `--agent`, `--dry-run`, `--force` and `--json` work as usual. An agent that reads both a repository copy and a home-folder copy lists the skill twice, so pick one per machine or repository. Rerun `localness skill install --global` after upgrading the CLI; the stderr note names `--global` when the home-folder copy is the outdated one.
 
 ## `localness.config.json`
 

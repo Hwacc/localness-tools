@@ -17,6 +17,7 @@ import {
 import type { LocalnessClient } from '@localness/sdk'
 import { countKinds, quote } from './diff'
 import {
+  configField,
   list,
   loadProject,
   plural,
@@ -137,7 +138,13 @@ export async function runPush(io: CliIo, values: CliValues) {
     dryRun,
   })
   if (values.json) {
-    io.stdout(`${JSON.stringify(pushJson(planned), null, 2)}\n`)
+    io.stdout(
+      `${JSON.stringify(
+        { config: configField(io, loaded), ...pushJson(planned) },
+        null,
+        2,
+      )}\n`,
+    )
   } else {
     describePush(io, planned, dryRun)
   }

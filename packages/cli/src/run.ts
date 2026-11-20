@@ -39,7 +39,8 @@ Commands:
                        List releases, pick the one new keys get, create one,
                        or label existing keys
   skill install        Install the Agent Skill that teaches coding agents
-                       this workflow, at the repository root
+                       this workflow, at the repository root (or with
+                       --global, in your home folder)
 
 Options:
   --config <path>      Config file (default: nearest localness.config.json)
@@ -59,9 +60,12 @@ Options:
                        Skill (skill install)
   --agent <a,b>        Agents the Skill is for: copilot, claude, cursor, codex
                        or all (default: copilot,claude,cursor)
-  --agents-md          Also point AGENTS.md at the Skill (skill install)
+  --agents-md          Also point AGENTS.md at the Skill (skill install; not
+                       with --global)
   --root <path>        Folder the agents open, when it is not the git root
-                       (skill install)
+                       (skill install; not with --global)
+  --global             Install the Skill in your home folder for every
+                       repository (skill install)
   --release <name>     Release new keys are labelled with (init)
   --none               No release for new keys (releases use)
   --use                Also use the release created (releases create)

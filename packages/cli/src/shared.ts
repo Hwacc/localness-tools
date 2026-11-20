@@ -1,7 +1,11 @@
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createClient, type FetchLike } from '@localness/sdk'
-import { findConfigFile, loadConfig } from '@localness/sdk/sync'
+import {
+  findConfigFile,
+  loadConfig,
+  type LoadedConfig,
+} from '@localness/sdk/sync'
 import { version } from '../package.json'
 import { ENV_FILE, TOKEN_ENV, findEnvToken } from './env'
 
@@ -13,6 +17,8 @@ export interface CliIo {
   /** Asks the person at the terminal; absent when nobody can answer. */
   prompt?(question: string): Promise<string>
   fetch?: FetchLike
+  /** Where `skill install --global` installs; default the user's home folder. */
+  home?: string
 }
 
 /**
@@ -39,6 +45,7 @@ export const OPTIONS = {
   agent: { type: 'string' },
   'agents-md': { type: 'boolean' },
   root: { type: 'string' },
+  global: { type: 'boolean' },
   release: { type: 'string' },
   none: { type: 'boolean' },
   use: { type: 'boolean' },
@@ -123,4 +130,9 @@ export async function loadProject(io: CliIo, values: CliValues) {
     fetch: io.fetch,
   })
   return { loaded, client }
+}
+
+/** The config file used, relative to the working directory, for JSON output. */
+export function configField(io: CliIo, loaded: LoadedConfig) {
+  return relative(io.cwd, loaded.path).split(sep).join('/')
 }

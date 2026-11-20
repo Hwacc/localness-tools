@@ -7,6 +7,7 @@ import {
 } from '@localness/sdk/sync'
 import {
   EXIT_DIFFERENT,
+  configField,
   list,
   loadProject,
   printWarnings,
@@ -131,6 +132,7 @@ export async function runDiff(io: CliIo, values: CliValues) {
     io.stdout(
       `${JSON.stringify(
         {
+          config: configField(io, loaded),
           sourceLocale: comparison.sourceLocale,
           locales: comparison.locales,
           content: comparison.content,

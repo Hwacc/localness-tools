@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { DataController } from './controller'
+import type { WorkspaceConfigs } from './configs'
 import type { LocalChanges } from './localChanges'
 
 const LINKED_COMMANDS = [
@@ -7,16 +8,20 @@ const LINKED_COMMANDS = [
   'localness.selectRelease',
   'localness.sync.focus',
   'localness.sync.push',
+  'localness.switchConfig',
+  'vscode.open',
 ]
 
-function link(label: string, command: string) {
-  return `[${label}](command:${command})`
+function link(label: string, command: string, args?: unknown[]) {
+  const query = args ? `?${encodeURIComponent(JSON.stringify(args))}` : ''
+  return `[${label}](command:${command}${query})`
 }
 
 /** One item for the project, display locale, release for new keys and local changes. */
 export function registerStatusBar(
   controller: DataController,
   changes: LocalChanges,
+  configs: WorkspaceConfigs,
 ) {
   const item = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -25,11 +30,32 @@ export function registerStatusBar(
   item.name = 'Localness'
   item.command = 'localness.showMenu'
 
+  const configLine = () => {
+    const path = controller.configPath
+    if (!path) return undefined
+    const uri = vscode.Uri.file(path)
+    const actions = [
+      link(vscode.workspace.asRelativePath(uri), 'vscode.open', [uri]),
+    ]
+    if (configs.uris.length > 1) {
+      actions.push(link('Switch', 'localness.switchConfig'))
+    }
+    return `$(gear) Config: ${actions.join(' · ')}`
+  }
+  const markdown = (lines: readonly (string | undefined)[]) => {
+    const tooltip = new vscode.MarkdownString(
+      lines.filter(Boolean).join('\n\n'),
+    )
+    tooltip.supportThemeIcons = true
+    tooltip.isTrusted = { enabledCommands: LINKED_COMMANDS }
+    return tooltip
+  }
+
   const render = () => {
     const { status, data } = controller
     if (status.kind === 'unconfigured') {
       item.text = `$(globe) Localness: ${status.message}`
-      item.tooltip = 'Localness: click to configure'
+      item.tooltip = markdown(['Localness: click to configure', configLine()])
       return
     }
     const parts = [data?.displayLocale ?? 'Localness']
@@ -44,7 +70,10 @@ export function registerStatusBar(
           : '$(globe)'
     item.text = `${icon} ${parts.join('  ')}`
 
-    const lines = [`**Localness**${data ? ` · ${data.projectName}` : ''}`]
+    const lines = [
+      `**Localness**${data ? ` · ${data.projectName}` : ''}`,
+      configLine(),
+    ]
     if (status.kind === 'error') lines.push(`$(warning) ${status.message}`)
     if (status.kind === 'loading') lines.push('Loading…')
     if (data) {
@@ -67,10 +96,7 @@ export function registerStatusBar(
         `$(git-compare) ${changes.count} locale-file ${changes.count === 1 ? 'text differs' : 'texts differ'} · ${actions.join(' · ')}`,
       )
     }
-    const tooltip = new vscode.MarkdownString(lines.join('\n\n'))
-    tooltip.supportThemeIcons = true
-    tooltip.isTrusted = { enabledCommands: LINKED_COMMANDS }
-    item.tooltip = tooltip
+    item.tooltip = markdown(lines)
   }
 
   render()
@@ -79,5 +105,6 @@ export function registerStatusBar(
     item,
     controller.onDidChange(render),
     changes.onDidChange(render),
+    configs.onDidChange(render),
   )
 }

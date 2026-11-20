@@ -12,6 +12,7 @@ import {
 import { attention, countKinds, quote } from './diff'
 import {
   EXIT_DIFFERENT,
+  configField,
   list,
   loadProject,
   plural,
@@ -157,6 +158,7 @@ export async function runPull(io: CliIo, values: CliValues) {
     io.stdout(
       `${JSON.stringify(
         {
+          config: configField(io, loaded),
           ...pullJson(run, dryRun),
           left: left.map(({ locale, key, kind }) => ({ locale, key, kind })),
         },

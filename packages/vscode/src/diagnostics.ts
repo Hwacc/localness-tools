@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { DataController } from './controller'
+import { isInside } from './core/configs'
 import { findMissingKeys } from './core/keys'
 import { findKey } from './core/localeFile'
 import type { LocalChanges } from './localChanges'
@@ -16,8 +17,12 @@ export function registerDiagnostics(
 
   const update = (document: vscode.TextDocument) => {
     const data = controller.data
+    const root = controller.config?.root
     if (
       !data ||
+      !root ||
+      document.uri.scheme !== 'file' ||
+      !isInside(root, document.uri.fsPath) ||
       !readSettings().diagnostics ||
       !matcher.isSupported(document)
     ) {
