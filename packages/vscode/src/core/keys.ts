@@ -71,6 +71,29 @@ export function findMissingKeys<T extends Pick<KeyMatch, 'key'>>(
   return matches.filter((match) => !index.has(match.key))
 }
 
+/**
+ * Every key that has others below it: `land`, `land.how_list` and
+ * `land.how_list.0` for `land.how_list.0.title`. Code may read such a key
+ * whole, as the array or object it holds.
+ */
+export function keyPrefixes(keys: Iterable<string>): Set<string> {
+  const prefixes = new Set<string>()
+  for (const key of keys) {
+    for (let at = key.indexOf('.'); at !== -1; at = key.indexOf('.', at + 1)) {
+      prefixes.add(key.slice(0, at))
+    }
+  }
+  return prefixes
+}
+
+/** The keys below `prefix`, array indexes in numeric order. */
+export function childKeys(keys: Iterable<string>, prefix: string): string[] {
+  const start = `${prefix}.`
+  return [...new Set(keys)]
+    .filter((key) => key.startsWith(start))
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+}
+
 /** Texts by locale of the keys the locale files add and the project lacks. */
 export function localOnlyTexts(
   entries: readonly Pick<DiffEntry, 'key' | 'locale' | 'kind' | 'local'>[],

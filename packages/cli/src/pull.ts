@@ -73,6 +73,7 @@ export function describePull(io: CliIo, run: PullRun, dryRun: boolean) {
     const parts = [
       file.set.length > 0 && `${file.set.length} set`,
       file.removed.length > 0 && `${file.removed.length} removed`,
+      file.keptInArray.length > 0 && `${file.keptInArray.length} kept in array`,
       file.skipped.length > 0 && `${file.skipped.length} skipped`,
     ].filter(Boolean)
     io.stdout(
@@ -80,7 +81,12 @@ export function describePull(io: CliIo, run: PullRun, dryRun: boolean) {
     )
     for (const key of file.skipped) {
       io.stdout(
-        `  skipped ${key}: its path collides with another key in the file\n`,
+        `  skipped ${key}: its path collides with another key or an array in the file\n`,
+      )
+    }
+    for (const key of file.keptInArray) {
+      io.stdout(
+        `  kept ${key}: it is in an array; remove array elements by hand\n`,
       )
     }
   }

@@ -13,6 +13,11 @@
     "lint": "oxlint packages && prettier --check .",
     "format": "prettier --write ."
   },
+  "pnpm": {
+    "overrides": {
+      "@localness/contract": "file:C:/my-workspace/localness/packages/contract"
+    }
+  },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "oxlint": "^1.93.0",

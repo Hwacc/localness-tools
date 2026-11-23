@@ -34,6 +34,10 @@ When `hasBase` is false (the first sync), every changed text is `different`. Say
 - A new key needs its text in the source-locale file. `apply` creates the key and publishes that source text; text in other locales becomes drafts.
 - A plan holds at most 200 keys and expires after an hour.
 
+## Arrays
+
+Arrays in a locale file are read by index: `land.how_list.0.title`, `help.tips.0`. The CLI only updates elements an array already has. A new key past the end of an array is listed in `skipped`, and a key `--prune` would remove from an array stays and is listed in `keptInArray`: removing an element would shift the keys of the elements after it. Tell the person about both; adding or removing array elements is a hand edit they decide on. `push` sends array keys like any other key.
+
 ## Several directories
 
 `files` may list several directories (for example `src/locales/default` and `src/locales/boostprime`). A key lives in the directory that already has it; a new key goes to the first directory whose `match` fits (`key` regex, project `namespace`), else to the one without a `match`. `diff --json` shows each difference's `target` (`{ dir, by }`), `locations` and `dirs`.

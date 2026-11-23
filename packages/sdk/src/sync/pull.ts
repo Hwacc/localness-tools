@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import {
+  inArray,
   unwritableKeys,
   writeLocaleFile,
 } from '@localness/contract/locale-file'
@@ -49,7 +50,15 @@ export interface PullFile {
   /** Keys written with the platform's text. */
   set: string[]
   removed: string[]
-  /** New keys whose path collides with the file's structure; left out. */
+  /**
+   * Keys to remove that sit in an array, left in place: removing an element
+   * would shift the keys of the elements after it.
+   */
+  keptInArray: string[]
+  /**
+   * New keys whose path collides with the file's structure, including any
+   * under an existing array; left out.
+   */
   skipped: string[]
   /** The new file content, or null when nothing is written. */
   output: string | null
@@ -65,8 +74,9 @@ export interface PullPlan {
 
 /**
  * The project's text for each entry of `kinds`, written to every directory
- * that has the key. Keys the project lacks stay unless `prune`; keys without
- * project text are never touched.
+ * that has the key. Keys the project lacks stay unless `prune`, and keys in
+ * an array always stay (`keptInArray`); keys without project text are never
+ * touched.
  */
 export function planPull(
   comparison: Comparison,
@@ -136,8 +146,17 @@ export function planPull(
       ),
     ].sort()
     for (const key of skipped) delete own[key]
+    const keptInArray = Object.keys(own)
+      .filter((key) => {
+        const path = file.content.paths.get(key)
+        return own[key] === null && path !== undefined && inArray(path)
+      })
+      .sort()
+    for (const key of keptInArray) delete own[key]
     const keys = Object.keys(own)
-    if (keys.length === 0 && skipped.length === 0) continue
+    if (keys.length === 0 && skipped.length === 0 && keptInArray.length === 0) {
+      continue
+    }
     files.push({
       locale: file.locale,
       dir: file.dir,
@@ -146,6 +165,7 @@ export function planPull(
       created: file.source === null && keys.length > 0,
       set: keys.filter((key) => own[key] !== null),
       removed: keys.filter((key) => own[key] === null),
+      keptInArray,
       skipped,
       output:
         keys.length > 0 ? writeLocaleFile(file.source, own, file.format) : null,

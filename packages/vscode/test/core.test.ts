@@ -22,16 +22,20 @@ import { filterByRelease, releaseChanges } from '../src/core/releases'
 import {
   buildHoverInfo,
   buildLocalHoverInfo,
+  buildPrefixHoverInfo,
   escapeMarkdown,
   renderHoverMarkdown,
+  renderPrefixHoverMarkdown,
 } from '../src/core/hover'
 import {
   buildIndex,
+  childKeys,
   editableText,
   findMissingKeys,
   hintOffset,
   hintText,
   isRevealed,
+  keyPrefixes,
   localOnlyTexts,
   publishedBehind,
   replaceKeyState,
@@ -105,6 +109,18 @@ describe('key state helpers', () => {
       { key: 'nope', start: 10, end: 14 },
     ]
     expect(findMissingKeys(matches, index).map((m) => m.key)).toEqual(['nope'])
+  })
+
+  it('knows keys that have others below them, at a dot boundary', () => {
+    const prefixes = keyPrefixes(['land.how_list.0.title', 'help.tips.1'])
+    expect(prefixes.has('land.how_list')).toBe(true)
+    expect(prefixes.has('land.how_list.0')).toBe(true)
+    expect(prefixes.has('help.tips')).toBe(true)
+    expect(prefixes.has('land.how')).toBe(false)
+    expect(prefixes.has('land.how_list.0.title')).toBe(false)
+    expect(
+      childKeys(['list.10', 'list.2', 'list.2', 'lists.0', 'list'], 'list'),
+    ).toEqual(['list.2', 'list.10'])
   })
 
   it('ranks search results and respects the limit', () => {
@@ -223,6 +239,40 @@ describe('hover', () => {
     expect(sections[0]).not.toContain('Releases')
     expect(sections[1]).toMatch(/Not pushed/)
     expect(sections[2]).toContain('> 新しい')
+  })
+
+  it('lists the keys below a prefix in the display locale, up to a limit', () => {
+    const index = buildIndex([
+      state(4, 'list.0.title', {
+        ja: { draftText: null, publishedText: '一', state: 'published' },
+      }),
+      state(5, 'list.1.title', {}),
+      state(6, 'listing', {}),
+    ])
+    const local = new Map([['list.2.title', { ja: '三' }]])
+    expect(
+      buildPrefixHoverInfo('list.0.title', index, local, 'ja'),
+    ).toBeUndefined()
+    const info = buildPrefixHoverInfo('list', index, local, 'ja', 2)
+    expect(info).toEqual({
+      prefix: 'list',
+      locale: 'ja',
+      children: [
+        { key: 'list.0.title', text: '一', local: false },
+        { key: 'list.1.title', text: undefined, local: false },
+      ],
+      more: 1,
+    })
+    const markdown = renderPrefixHoverMarkdown(info!)
+    expect(markdown).toContain('3 keys below')
+    expect(markdown).toContain('- `list.0.title` 一')
+    expect(markdown).toContain('- `list.1.title` _No text_')
+    expect(markdown).toContain('- … 1 more')
+    expect(
+      renderPrefixHoverMarkdown(
+        buildPrefixHoverInfo('list.2', index, local, 'ja')!,
+      ),
+    ).toContain('- `list.2.title` $(cloud-upload) 三')
   })
 })
 describe('project data', () => {
@@ -392,7 +442,7 @@ describe('placing keys across directories', () => {
     path: `/${dir}/en.json`,
     relativePath: `${dir}/en.json`,
     source: null,
-    content: { entries: {}, paths: new Map(), blocked: [] },
+    content: { entries: {}, paths: new Map(), blocked: [], arrays: [] },
   })
   const place = (dir: string, value: string) => ({
     dir,

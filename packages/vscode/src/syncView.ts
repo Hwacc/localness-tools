@@ -355,6 +355,14 @@ export function registerSyncView(
           `Localness: ${skipped.join(', ')} would break the structure of the locale files and ${skipped.length === 1 ? 'was' : 'were'} left out.`,
         )
       }
+      const keptInArray = [
+        ...new Set(plan.files.flatMap((file) => file.keptInArray)),
+      ]
+      if (keptInArray.length > 0) {
+        void vscode.window.showWarningMessage(
+          `Localness: ${keptInArray.join(', ')} ${keptInArray.length === 1 ? 'is' : 'are'} in an array and ${keptInArray.length === 1 ? 'was' : 'were'} kept; remove array elements by hand.`,
+        )
+      }
       vscode.window.setStatusBarMessage(
         written.length > 0
           ? `Localness: updated ${written.map((file) => file.relativePath).join(', ')}`

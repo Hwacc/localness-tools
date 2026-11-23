@@ -7,6 +7,7 @@ import {
   localeFileName,
   localeFilesScopeError,
   readLocaleFile,
+  type LocaleKeyPath,
 } from '@localness/contract/locale-file'
 import { createClient, findRelease, namespaceOf } from '@localness/sdk'
 import {
@@ -202,7 +203,7 @@ async function detectFormat(
 ): Promise<LocaleFileFormat> {
   let dotted = false
   for (const path of paths) {
-    let segmentsList: string[][]
+    let segmentsList: LocaleKeyPath[]
     try {
       const source = await readFile(join(root, path), 'utf8')
       segmentsList = [...readLocaleFile(source).paths.values()]
@@ -211,7 +212,7 @@ async function detectFormat(
     }
     for (const segments of segmentsList) {
       if (segments.length > 1) return LocaleFileFormat.NESTED_JSON
-      if (segments[0]!.includes('.')) dotted = true
+      if (String(segments[0]).includes('.')) dotted = true
     }
   }
   return dotted ? LocaleFileFormat.FLAT_JSON : LocaleFileFormat.NESTED_JSON

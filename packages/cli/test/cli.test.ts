@@ -408,6 +408,28 @@ describe('commands', () => {
     expect(await cli(['diff'], fetch)).toBe(0)
   })
 
+  it('pull --prune keeps array elements and lists them in keptInArray', async () => {
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    await put('locales/en.json', '{ "list": ["One", "Two"] }')
+    const fetch = platform({ 'list.0': { en: 'First' } })
+
+    expect(await cli(['pull', '--prune', '--json'], fetch)).toBe(0)
+    expect(JSON.parse(out.join('')).files).toMatchObject([
+      {
+        relativePath: 'locales/en.json',
+        set: ['list.0'],
+        removed: [],
+        keptInArray: ['list.1'],
+      },
+    ])
+    expect(
+      JSON.parse(await readFile(join(root, 'locales/en.json'), 'utf8')),
+    ).toEqual({ list: ['First', 'Two'] })
+  })
+
   it('diff --json names the config it used, relative to the working directory', async () => {
     for (const app of ['web', 'admin']) {
       await put(

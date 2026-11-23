@@ -245,6 +245,39 @@ describe('locale file sync', () => {
     expect(JSON.parse(file!.output!)).toEqual({ cta: 'Go now' })
   })
 
+  it('updates array elements in place, never adds or removes them', async () => {
+    const loaded = await setup({ locales: ['en'] })
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ list: [{ title: 'Old' }, { title: 'Gone' }] }),
+    )
+    const { fetch } = platform({
+      'list.0.title': { en: { publishedText: 'New' } },
+      'list.2.title': { en: { publishedText: 'Past the end' } },
+    })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client)
+    const withBase = { ...comparison, base: { en: { 'list.1.title': 'Gone' } } }
+    expect(
+      withBase.entries.find((entry) => entry.key === 'list.1.title')
+        ?.onPlatform,
+    ).toBe(false)
+    const plan = planPull(withBase, { kinds: PULL_KINDS, prune: true })
+    expect(plan.files[0]).toMatchObject({
+      set: ['list.0.title'],
+      removed: [],
+      keptInArray: ['list.1.title'],
+      skipped: ['list.2.title'],
+    })
+    expect(JSON.parse(plan.files[0]!.output!)).toEqual({
+      list: [{ title: 'New' }, { title: 'Gone' }],
+    })
+    expect(recordPull(withBase, plan.files).en).toEqual({
+      'list.0.title': 'New',
+      'list.1.title': 'Gone',
+    })
+  })
+
   it("blocks new keys whose name breaks the project's convention", async () => {
     const loaded = await setup()
     await writeFile(

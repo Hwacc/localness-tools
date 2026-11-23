@@ -1,6 +1,6 @@
 import type { DeliveryKeyState, DeliveryLocaleStateName } from '@localness/sdk'
 import { localeName } from './locales'
-import { publishedBehind, stateFor, textFor } from './keys'
+import { childKeys, publishedBehind, stateFor, textFor, truncate } from './keys'
 
 export interface HoverContext {
   sourceLocale: string
@@ -138,4 +138,64 @@ export function renderHoverMarkdown(
     ...info.locales.map((entry) => localeSection(entry, links.edit)),
     ...(links.footer?.length ? [links.footer.join(' · ')] : []),
   ].join('\n\n---\n\n')
+}
+
+export const PREFIX_HOVER_LIMIT = 10
+
+export interface PrefixHoverChild {
+  key: string
+  text: string | undefined
+  /** Only in the locale files. */
+  local: boolean
+}
+
+/** A key the code reads whole, as the array or object of the keys below it. */
+export interface PrefixHoverInfo {
+  prefix: string
+  locale: string
+  children: PrefixHoverChild[]
+  /** Children past the limit, not listed. */
+  more: number
+}
+
+/** Undefined when no key sits below `prefix`. */
+export function buildPrefixHoverInfo(
+  prefix: string,
+  index: ReadonlyMap<string, DeliveryKeyState>,
+  localOnly: ReadonlyMap<string, Readonly<Record<string, string>>>,
+  displayLocale: string,
+  limit = PREFIX_HOVER_LIMIT,
+): PrefixHoverInfo | undefined {
+  const keys = childKeys([...index.keys(), ...localOnly.keys()], prefix)
+  if (keys.length === 0) return undefined
+  return {
+    prefix,
+    locale: displayLocale,
+    children: keys.slice(0, limit).map((key) => {
+      const state = index.get(key)
+      return state
+        ? { key, text: textFor(state, displayLocale), local: false }
+        : { key, text: localOnly.get(key)?.[displayLocale], local: true }
+    }),
+    more: Math.max(0, keys.length - limit),
+  }
+}
+
+export function renderPrefixHoverMarkdown(info: PrefixHoverInfo): string {
+  const count = info.children.length + info.more
+  const head = [
+    `$(symbol-array) **\`${info.prefix.replace(/`/g, "'")}\`**`,
+    `${count} ${count === 1 ? 'key' : 'keys'} below`,
+    `**${escapeMarkdown(info.locale.toUpperCase())}** · ${escapeMarkdown(localeName(info.locale))}`,
+  ].join('&nbsp;&nbsp;&nbsp;')
+  const lines = info.children.map((child) => {
+    const text =
+      child.text === undefined || child.text === ''
+        ? '_No text_'
+        : escapeMarkdown(truncate(child.text, 80))
+    const badge = child.local ? ' $(cloud-upload)' : ''
+    return `- \`${child.key.replace(/`/g, "'")}\`${badge} ${text}`
+  })
+  if (info.more > 0) lines.push(`- … ${info.more} more`)
+  return `${head}\n\n---\n\n${lines.join('\n')}`
 }

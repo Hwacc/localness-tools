@@ -6,6 +6,7 @@ import {
   readLocaleFile,
   type LocaleFileContent,
   type LocaleFileFormat,
+  type LocaleKeyPath,
 } from '@localness/contract/locale-file'
 import {
   normalizeDir,
@@ -35,8 +36,8 @@ export interface LocalKeyLocation {
   dir: string
   relativePath: string
   value: string
-  /** The property path in the file. */
-  path: string[]
+  /** The property path in the file; a number is an array index. */
+  path: LocaleKeyPath
 }
 
 export interface LocalLocale {
@@ -84,7 +85,7 @@ async function readFileOf(
   try {
     content =
       source === null
-        ? { entries: emptyEntries(), paths: new Map(), blocked: [] }
+        ? { entries: emptyEntries(), paths: new Map(), blocked: [], arrays: [] }
         : readLocaleFile(source)
   } catch (error) {
     throw new Error(

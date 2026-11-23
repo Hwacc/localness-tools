@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import type { DataController } from './controller'
 import { isInside } from './core/configs'
-import { findMissingKeys } from './core/keys'
+import { findMissingKeys, keyPrefixes } from './core/keys'
 import { findKey } from './core/localeFile'
 import type { LocalChanges } from './localChanges'
 import type { KeyMatcher } from './matcher'
@@ -29,10 +29,16 @@ export function registerDiagnostics(
       collection.delete(document.uri)
       return
     }
+    const prefixes = keyPrefixes([
+      ...data.index.keys(),
+      ...changes.localOnly.keys(),
+    ])
     const missing = findMissingKeys(
       matcher.keysIn(document),
       data.index,
-    ).filter((match) => !changes.localOnly.has(match.key))
+    ).filter(
+      (match) => !changes.localOnly.has(match.key) && !prefixes.has(match.key),
+    )
     collection.set(
       document.uri,
       missing.map((match) => {

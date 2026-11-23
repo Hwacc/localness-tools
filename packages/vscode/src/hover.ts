@@ -4,7 +4,9 @@ import type { ProjectData } from './core/data'
 import {
   buildHoverInfo,
   buildLocalHoverInfo,
+  buildPrefixHoverInfo,
   renderHoverMarkdown,
+  renderPrefixHoverMarkdown,
   type HoverInfo,
 } from './core/hover'
 import { keyUrl } from './core/urls'
@@ -116,12 +118,25 @@ export function registerHover(
       const state = data.index.get(hit.key)
       if (!state) {
         const local = changes.localOnly.get(hit.key)
-        return local
-          ? new vscode.Hover(
-              hoverMarkdown(buildLocalHoverInfo(hit.key, local, data)),
-              hit.range,
-            )
-          : undefined
+        if (local) {
+          return new vscode.Hover(
+            hoverMarkdown(buildLocalHoverInfo(hit.key, local, data)),
+            hit.range,
+          )
+        }
+        const prefix = buildPrefixHoverInfo(
+          hit.key,
+          data.index,
+          changes.localOnly,
+          data.displayLocale,
+        )
+        if (!prefix) return undefined
+        const markdown = new vscode.MarkdownString(
+          renderPrefixHoverMarkdown(prefix),
+        )
+        markdown.supportThemeIcons = true
+        markdown.supportHtml = true
+        return new vscode.Hover(markdown, hit.range)
       }
       return new vscode.Hover(
         hoverMarkdown(hoverInfoFor(controller, data, state)),

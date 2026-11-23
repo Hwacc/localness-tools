@@ -21,6 +21,7 @@ A repository may have several `localness.config.json` files (one per package or 
 - Never decide a `conflict`, `different` or `duplicate` key yourself. Show each side's text and let a person choose.
 - Never choose the folder of a key yourself: the CLI routes new keys by the config's `match` rules, and a key it cannot route (`unrouted`) waits for a person to name the directory.
 - Never pass `--prune` unless a person asked to delete those keys from the files.
+- Arrays in locale files are read by index (`land.how_list.0.title`) and only updated in place. Never add or remove array elements unless a person asked; report `skipped` and `keptInArray` keys to them.
 - Edit locale files only for what the task asks for. New or changed product text goes in the source-locale file; other locales are translated in Localness unless the task supplies the translations.
 - Never read, print, ask for or write `LOCALNESS_TOKEN`. Never edit or commit `.localness/`.
 - `apply` writes drafts. Publishing happens in the Localness web app, so never say the text is live.
