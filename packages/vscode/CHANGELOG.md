@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Array texts in locale files are read by index (`land.how_list.0.title`). A key the code reads whole, such as `t('land.how_list')`, no longer gets "Key not found on remote" when keys exist below it; its hover lists those keys with their display-locale text (up to 10). Pulling a remote deletion never removes an array element: the key is kept and a warning names it.
 - Locale files in several directories (`files` as a list): new keys go where the config's `match` rules say, extraction offers the suggested directory, keys in several directories show up as `duplicate` in the Local Files view and in Problems, and unplaceable keys ask for a directory.
