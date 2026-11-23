@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - Locale files in several directories (`files` as a list): new keys go where the config's `match` rules say, extraction offers the suggested directory, keys in several directories show up as `duplicate` in the Local Files view and in Problems, and unplaceable keys ask for a directory.
 - The texts on Localness are now called "remote" throughout ("New on remote", "Compare with remote", "Push to remote", hover "Remote:"); "project" now only means the Localness project. Command ids and context values are unchanged.
