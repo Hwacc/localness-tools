@@ -119,12 +119,39 @@ export function registerTree(
     treeDataProvider: provider,
     canSelectMany: true,
   })
+  let endProgress: (() => void) | undefined
+  const syncProgress = (loading: boolean) => {
+    if (!loading) {
+      endProgress?.()
+      endProgress = undefined
+      return
+    }
+    if (endProgress) return
+    const done = new Promise<void>((resolve) => {
+      endProgress = resolve
+    })
+    void vscode.window.withProgress(
+      { location: { viewId: 'localness.keys' } },
+      () => done,
+    )
+  }
   const sync = () => {
+    const { status } = controller
     void vscode.commands.executeCommand(
       'setContext',
       'localness.ready',
       controller.data !== undefined,
     )
+    void vscode.commands.executeCommand(
+      'setContext',
+      'localness.status',
+      status.kind,
+    )
+    syncProgress(status.kind === 'loading')
+    view.message =
+      status.kind === 'error' || status.kind === 'unconfigured'
+        ? status.message
+        : undefined
     const { filter } = provider
     const release =
       filter === undefined
@@ -163,6 +190,7 @@ export function registerTree(
   sync()
   return vscode.Disposable.from(
     view,
+    { dispose: () => syncProgress(false) },
     controller.onDidChange(sync),
     configs.onDidChange(sync),
     changes.onDidChange(() => provider.refresh()),

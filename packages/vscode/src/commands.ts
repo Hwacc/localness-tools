@@ -265,13 +265,19 @@ function showMenu(
   const placeholder =
     status.kind === 'error' || status.kind === 'unconfigured'
       ? status.message
-      : 'Type to filter'
+      : status.kind === 'loading'
+        ? 'Loading…'
+        : 'Type to filter'
 
   const showAccount = (back: boolean) => {
     pick.title = back ? `${title} · Project and account` : title
     pick.placeholder = back ? '' : placeholder
     pick.buttons = back ? [vscode.QuickInputButtons.Back] : []
-    pick.items = accountItems(configs)
+    pick.busy = !back && status.kind === 'loading'
+    pick.items =
+      back || status.kind !== 'loading'
+        ? accountItems(configs)
+        : [{ label: '$(sync~spin) Loading…' }, ...accountItems(configs)]
   }
 
   const showMain = () => {
@@ -286,6 +292,7 @@ function showMenu(
     })
     pick.title = title
     pick.placeholder = placeholder
+    pick.busy = controller.status.kind === 'loading'
     pick.buttons = [searchButton, refreshButton, accountButton]
     pick.matchOnDescription = true
     const command = (name: string) => () => vscode.commands.executeCommand(name)

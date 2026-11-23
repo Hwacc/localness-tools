@@ -51,7 +51,7 @@ export class DataController implements vscode.Disposable {
   readonly #store: FileStore
   #generation = 0
   #following = 0
-  #status: Status = { kind: 'unconfigured', message: 'Not configured' }
+  #status: Status = { kind: 'loading' }
   #data: ProjectData | undefined
   #client: LocalnessClient | undefined
   #configPath: string | undefined
@@ -103,6 +103,7 @@ export class DataController implements vscode.Disposable {
 
   /** Loads `path`; undefined finds the config again from the active file. */
   useConfig(path: string | undefined, force = false) {
+    if (path !== this.#configPath) this.#clear({ kind: 'loading' })
     this.#configPath = path
     return this.reload(force)
   }

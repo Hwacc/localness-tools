@@ -2,7 +2,7 @@
   "name": "localness-vscode",
   "displayName": "Localness",
   "description": "Hover, inline hints, diagnostics and a key browser for Localness translation keys.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "icon": "media/icon.png",
   "keywords": [
@@ -435,8 +435,13 @@
     "viewsWelcome": [
       {
         "view": "localness.keys",
+        "contents": "Loading Localness…",
+        "when": "!localness.ready && localness.status != unconfigured && localness.status != error"
+      },
+      {
+        "view": "localness.keys",
         "contents": "Connect to a Localness instance to browse translation keys.\n[Sign in](command:localness.signIn)\n[Select project](command:localness.selectProject)",
-        "when": "!localness.ready"
+        "when": "!localness.ready && localness.status =~ /^(unconfigured|error)$/"
       },
       {
         "view": "localness.sync",
