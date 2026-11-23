@@ -13,18 +13,21 @@ With several `localness.config.json` files, do these steps once per config the t
 
 `localness sync` does steps 4 and 5 together for the unambiguous kinds. `--dry-run` previews `pull`, `push` and `sync`.
 
-| `kind`             | Meaning                                                                                | Action                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `platform-added`   | Remote has text the file lacks                                                         | `pull`                                                                                 |
-| `platform-changed` | Remote changed it; the file did not                                                    | `pull`                                                                                 |
-| `local-added`      | The file has text remote lacks                                                         | `push`                                                                                 |
-| `local-changed`    | The file changed it; remote did not                                                    | `push`                                                                                 |
-| `pending-publish`  | The file matches an unpublished draft                                                  | Nothing; it gets published in the web app                                              |
-| `conflict`         | Both sides changed, or a push would overwrite someone's draft                          | Ask; then `pull --keys` or `push --keys`                                               |
-| `different`        | The texts differ and there is no base yet                                              | Ask; then `pull --keys` or `push --keys`                                               |
-| `platform-deleted` | The key left remote; the file still has it                                             | Ask; remove it from the file, or `pull --prune` when the person wants all of them gone |
-| `local-deleted`    | The file dropped a key remote still has                                                | Ask; the CLI never deletes keys on remote, a person does that in the web app           |
-| `duplicate`        | The key is in several directories with different texts, or remote added a locale to it | Ask; show every location and the remote text (see "Several directories")               |
+| `kind`             | Meaning                                                                                | Action                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `platform-added`   | Remote has text the file lacks                                                         | `pull`                                                                                         |
+| `platform-changed` | Remote changed it; the file did not                                                    | `pull`                                                                                         |
+| `local-added`      | The file has text remote lacks                                                         | `push`                                                                                         |
+| `local-changed`    | The file changed it; remote did not                                                    | `push`                                                                                         |
+| `pending-publish`  | The file matches an unpublished draft                                                  | Nothing; it gets published in the web app                                                      |
+| `empty`            | The file writes the key with an empty value and the project has no text                | Tell the person; deleting the key falls back to the source locale, or wait for the translation |
+| `conflict`         | Both sides changed, or a push would overwrite someone's draft                          | Ask; then `pull --keys` or `push --keys`                                                       |
+| `different`        | The texts differ and there is no base yet                                              | Ask; then `pull --keys` or `push --keys`                                                       |
+| `platform-deleted` | The key left remote; the file still has it                                             | Ask; remove it from the file, or `pull --prune` when the person wants all of them gone         |
+| `local-deleted`    | The file dropped a key remote still has                                                | Ask; the CLI never deletes keys on remote, a person does that in the web app                   |
+| `duplicate`        | The key is in several directories with different texts, or remote added a locale to it | Ask; show every location and the remote text (see "Several directories")                       |
+
+An empty value usually renders blank instead of falling back to the source locale. Do not pull or push it, and delete it only when the person asks. A stderr warning that a file is not a project locale means its name matches the pattern but no project locale (`zh.json` when the project has `zh_cn` usually needs `localeMap`). That file is not read, pulled or pushed. If the warning says it cannot be parsed, the file is empty or not JSON. Report these warnings; never edit `localeMap`, rename or delete the file yourself.
 
 When `hasBase` is false (the first sync), every changed text is `different`. Say so before pulling: a plain `pull` takes the remote text for all of them.
 

@@ -47,6 +47,7 @@ const KIND_GROUPS: Record<DiffKind, { label: string; icon: string }> = {
   conflict: { label: 'Conflicts', icon: 'warning' },
   duplicate: { label: 'In several directories', icon: 'copy' },
   'pending-publish': { label: 'Waiting for publish', icon: 'clock' },
+  empty: { label: 'Empty locally', icon: 'circle-slash' },
 }
 const KIND_ORDER = Object.keys(KIND_GROUPS) as DiffKind[]
 /** Kinds a group pull takes without asking: what `localness pull` takes, plus removals. */
@@ -76,7 +77,7 @@ function entryTooltip(entry: DiffEntry) {
   const lines = [
     `**${entry.key}** · ${entry.locale} · ${KIND_GROUPS[entry.kind].label}`,
     '',
-    `- Locale file: ${quote(entry.local)}`,
+    `- Locale file: ${entry.kind === 'empty' ? '`""`' : quote(entry.local)}`,
     `- Remote: ${quote(entry.platform)}`,
   ]
   if (entry.draft !== null && entry.draft !== entry.platform) {
@@ -136,7 +137,8 @@ class SyncTreeProvider implements vscode.TreeDataProvider<Node> {
     const { entry } = node
     const item = new vscode.TreeItem(entry.key)
     item.id = entryId(entry)
-    const shown = entry.local ?? entry.platform
+    const shown =
+      entry.kind === 'empty' ? '""' : (entry.local ?? entry.platform)
     item.description = `${entry.locale}${shown === null ? '' : ` · ${truncate(shown, 50)}`}`
     item.tooltip = entryTooltip(entry)
     item.contextValue = contextValue('syncEntry', {

@@ -150,6 +150,44 @@ describe('diffLocaleTexts', () => {
       waiting: 'pending-publish',
     })
   })
+
+  it('reports an empty value only when the file and remote both have no text', () => {
+    const place = (dir: string, value: string) => ({
+      dir,
+      relativePath: `${dir}/en.json`,
+      value,
+      path: [value],
+    })
+    const entries = diffLocaleTexts({
+      locales: ['en'],
+      local: { en: { kept: 'Hello' } },
+      platform: {
+        texts: {
+          en: { absent: null, blank: null, kept: null, remote: 'Hello' },
+        },
+        drafts: { en: {} },
+      },
+      base: null,
+      placement: {
+        dirs: { split: ['a', 'b'] },
+        locations: {
+          en: { split: [place('a', 'one'), place('b', 'two')] },
+        },
+        empties: {
+          en: ['blank', 'kept', 'onlyLocal', 'remote', 'split'],
+        },
+      },
+    })
+    expect(
+      Object.fromEntries(entries.map((entry) => [entry.key, entry.kind])),
+    ).toEqual({
+      blank: 'empty',
+      kept: 'local-added',
+      onlyLocal: 'empty',
+      remote: 'platform-added',
+      split: 'duplicate',
+    })
+  })
 })
 
 describe('locale file sync', () => {
@@ -409,6 +447,154 @@ describe('locale file sync', () => {
     const comparison = await compareLocaleFiles(loaded, client, { keys: ['a'] })
     expect(comparison.entries.map((entry) => entry.key)).toEqual(['a'])
     expect(calls.at(-1)!.url.searchParams.get('keys')).toBe('a')
+  })
+
+  it('reports an empty value, and pulls remote text over one', async () => {
+    const loaded = await setup({ locales: ['en'] })
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ blank: '', other: '   ', title: '', real: 'Mine' }),
+    )
+    const { fetch } = platform({
+      title: { en: { publishedText: 'Hello' } },
+      missing: { en: { publishedText: '' } },
+    })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client)
+    expect(
+      comparison.entries.map((entry) => [entry.key, entry.kind, entry.local]),
+    ).toEqual([
+      ['blank', 'empty', null],
+      ['other', 'empty', null],
+      ['real', 'local-added', 'Mine'],
+      ['title', 'platform-added', null],
+    ])
+    expect(comparison.placement.empties.en).toEqual(['blank', 'other', 'title'])
+    expect(comparison.entries.some((entry) => entry.key === 'missing')).toBe(
+      false,
+    )
+    const pulled = planPull(comparison, {
+      kinds: FORCED_PULL_KINDS,
+      prune: true,
+    })
+    expect(pulled.files.map((file) => [file.set, file.removed])).toEqual([
+      [['title'], ['real']],
+    ])
+    expect(
+      planPush(loaded, comparison, { kinds: FORCED_PUSH_KINDS }).keys.map(
+        (item) => item.key,
+      ),
+    ).toEqual(['real'])
+  })
+
+  it('limits empty keys to the requested names', async () => {
+    const loaded = await setup({ locales: ['en'] })
+    await writeFile(
+      join(root, 'locales', 'en.json'),
+      JSON.stringify({ blank: '', other: '' }),
+    )
+    const { fetch } = platform({})
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client, {
+      keys: ['blank'],
+    })
+    expect(comparison.entries.map((entry) => [entry.key, entry.kind])).toEqual([
+      ['blank', 'empty'],
+    ])
+    expect(comparison.placement.empties.en).toEqual(['blank'])
+  })
+
+  it('keeps a real text in another directory ahead of an empty one', async () => {
+    const loaded = await setup({
+      files: [{ dir: 'a' }, { dir: 'b' }],
+      locales: ['en'],
+    })
+    await mkdir(join(root, 'a'), { recursive: true })
+    await mkdir(join(root, 'b'), { recursive: true })
+    await writeFile(
+      join(root, 'a', 'en.json'),
+      JSON.stringify({ title: '', blank: '', split: 'one' }),
+    )
+    await writeFile(
+      join(root, 'b', 'en.json'),
+      JSON.stringify({ title: 'Hello', blank: '', split: 'two' }),
+    )
+    const { fetch } = platform({})
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client)
+    expect(
+      comparison.entries.map((entry) => [entry.key, entry.kind, entry.local]),
+    ).toEqual([
+      ['blank', 'empty', null],
+      ['split', 'duplicate', null],
+      ['title', 'local-added', 'Hello'],
+    ])
+    expect(comparison.placement.empties.en).toEqual(['blank', 'title'])
+  })
+
+  it('warns about files that are not a project locale', async () => {
+    const loaded = await setup({
+      files: [
+        { dir: 'gogreen' },
+        { dir: 'lwi' },
+        { dir: 'onboard' },
+        { dir: 'nested', pattern: '{locale}/messages.json' },
+        { dir: 'absent' },
+      ],
+    })
+    const put = async (path: string, text: string) => {
+      await mkdir(join(root, ...path.split('/').slice(0, -1)), {
+        recursive: true,
+      })
+      await writeFile(join(root, ...path.split('/')), text)
+    }
+    await put('gogreen/en.json', '{}')
+    await put('gogreen/zh-CN.json', '{}')
+    await put('gogreen/zh-TW.json', '{}')
+    await put('gogreen/zh.json', JSON.stringify({ title: '标题' }))
+    await put('gogreen/.DS_Store', '')
+    await put('gogreen/notes.txt', 'nope')
+    await put('lwi/en.json', '{}')
+    await put('lwi/it.json', JSON.stringify({ a: 'A' }))
+    await put('onboard/zh.json', '')
+    await put('nested/en/messages.json', '{}')
+    await put('nested/en/other.json', JSON.stringify({ a: 'nope' }))
+    await put('nested/fr/messages.json', JSON.stringify({ a: 'A' }))
+    const { fetch } = platform({}, { locales: ['en', 'zh_cn', 'zh_tw'] })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client)
+    const has = 'en, zh_cn, zh_tw'
+    expect(comparison.warnings).toEqual([
+      `gogreen/zh.json is not a project locale; "zh" looks like zh_cn, zh_tw, so check localeMap (the project has: ${has}).`,
+      `lwi/it.json is not a project locale (the project has: ${has}).`,
+      `onboard/zh.json is not a project locale; "zh" looks like zh_cn, zh_tw, so check localeMap (the project has: ${has}). It cannot be parsed: Invalid JSON (ValueExpected).`,
+      `nested/fr/messages.json is not a project locale (the project has: ${has}).`,
+    ])
+    expect(comparison.entries).toEqual([])
+    const paths = comparison.files.map((file) => file.relativePath)
+    expect(paths).toContain('gogreen/zh-CN.json')
+    expect(paths).toContain('nested/en/messages.json')
+    expect(paths).not.toContain('gogreen/zh.json')
+    expect(paths).not.toContain('lwi/it.json')
+    expect(paths).not.toContain('onboard/zh.json')
+    expect(paths).not.toContain('nested/fr/messages.json')
+  })
+
+  it('does not warn when localeMap names the file', async () => {
+    const loaded = await setup({
+      files: { dir: 'gogreen' },
+      localeMap: { zh_cn: 'zh' },
+    })
+    await mkdir(join(root, 'gogreen'), { recursive: true })
+    await writeFile(join(root, 'gogreen', 'zh.json'), '{}')
+    await writeFile(join(root, 'gogreen', 'en.json'), '{}')
+    await writeFile(join(root, 'gogreen', 'zh-CN.json'), '{}')
+    const { fetch } = platform({}, { locales: ['en', 'zh_cn'] })
+    const client = createClient({ baseUrl: BASE_URL, token: TOKEN, fetch })
+    const comparison = await compareLocaleFiles(loaded, client)
+    expect(comparison.warnings).toEqual([
+      'gogreen/zh-CN.json is not a project locale; "zh-CN" looks like zh_cn, so check localeMap (the project has: en, zh_cn).',
+    ])
   })
 
   it('labels created keys with the config release', async () => {

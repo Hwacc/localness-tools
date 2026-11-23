@@ -111,6 +111,7 @@ export function planPull(
   }
 
   for (const entry of comparison.entries) {
+    if (entry.kind === 'empty') continue
     if (!entry.onPlatform && options.prune) {
       put(
         entry,

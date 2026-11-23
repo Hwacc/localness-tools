@@ -1,7 +1,9 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  LOCALE_PLACEHOLDER,
   emptyEntries,
+  localeFileName,
   localeFilePath,
   readLocaleFile,
   type LocaleFileContent,
@@ -49,6 +51,11 @@ export interface LocalLocale {
   entries: Record<string, string>
   /** Per key, where this locale has it. */
   locations: Record<string, LocalKeyLocation[]>
+  /**
+   * Keys a file of this locale writes with an empty value: present in
+   * `paths`, absent from that file's `entries`. Sorted.
+   */
+  empties: string[]
 }
 
 export interface LocalPlacement {
@@ -56,6 +63,8 @@ export interface LocalPlacement {
   dirs: Record<string, string[]>
   /** Per locale, per key: the locale's locations. */
   locations: Record<string, Record<string, LocalKeyLocation[]>>
+  /** Per locale, keys a file writes with an empty value. Sorted. */
+  empties: Record<string, string[]>
 }
 
 export interface LocalFiles {
@@ -135,8 +144,10 @@ export async function readLocalFiles(
   }
   const files = all.filter((file) => locales.includes(file.locale))
   const placed: LocalPlacement['locations'] = {}
+  const empties: LocalPlacement['empties'] = {}
   const merged = locales.map((locale): LocalLocale => {
     const locations: LocalLocale['locations'] = Object.create(null)
+    const empty = new Set<string>()
     for (const file of files.filter((item) => item.locale === locale)) {
       for (const [key, value] of Object.entries(file.content.entries)) {
         const list = (locations[key] ??= [])
@@ -147,6 +158,9 @@ export async function readLocalFiles(
           path: file.content.paths.get(key) ?? [key],
         })
       }
+      for (const key of file.content.paths.keys()) {
+        if (!Object.hasOwn(file.content.entries, key)) empty.add(key)
+      }
     }
     const entries = emptyEntries()
     for (const [key, list] of Object.entries(locations)) {
@@ -154,14 +168,115 @@ export async function readLocalFiles(
         entries[key] = list[0]!.value
       }
     }
+    const blank = [...empty].sort()
     placed[locale] = locations
-    return { locale, entries, locations }
+    empties[locale] = blank
+    return { locale, entries, locations, empties: blank }
   })
   return {
     files,
     locales: merged,
-    placement: { dirs, locations: placed },
+    placement: { dirs, locations: placed, empties },
   }
+}
+
+/**
+ * `/`-separated paths of the files exactly `depth` directories below `dir`,
+ * relative to it. Missing: none.
+ */
+async function filesIn(dir: string, depth: number): Promise<string[]> {
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
+  }
+  const found: string[] = []
+  for (const entry of entries) {
+    if (depth > 0 && entry.isDirectory()) {
+      for (const name of await filesIn(join(dir, entry.name), depth - 1)) {
+        found.push(`${entry.name}/${name}`)
+      }
+    } else if (depth === 0 && entry.isFile()) found.push(entry.name)
+  }
+  return found
+}
+
+/** `{locale}` is one path segment; the rest of the pattern is literal. */
+function localeNamePattern(pattern: string) {
+  const [before, after] = pattern.split(LOCALE_PLACEHOLDER)
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^${escape(before ?? '')}([^/]+)${escape(after ?? '')}$`)
+}
+
+// `zh` and `zh_cn` share a language; case and `-`/`_` do not count.
+function languageOf(name: string) {
+  return name.toLowerCase().split(/[-_]/)[0] ?? ''
+}
+
+function similarLocales(name: string, locales: readonly string[]) {
+  const language = languageOf(name)
+  if (!language) return []
+  return locales.filter((locale) => languageOf(locale) === language)
+}
+
+function strayFileWarning(
+  relativePath: string,
+  name: string,
+  projectLocales: readonly string[],
+  parseError: string | undefined,
+) {
+  const project = projectLocales.join(', ') || 'none'
+  const like = similarLocales(name, projectLocales)
+  const hint =
+    like.length > 0
+      ? `; "${name}" looks like ${like.join(', ')}, so check localeMap`
+      : ''
+  const parsed = parseError ? ` It cannot be parsed: ${parseError}.` : ''
+  return `${relativePath} is not a project locale${hint} (the project has: ${project}).${parsed}`
+}
+
+/**
+ * One warning per file under a configured directory that matches its pattern
+ * and is not a project locale. A missing directory adds nothing.
+ */
+export async function strayLocaleFileWarnings(
+  loaded: LoadedConfig,
+  projectLocales: readonly string[],
+): Promise<string[]> {
+  const localeMap = loaded.config.localeMap ?? null
+  const warnings: string[] = []
+  for (const entry of requireFiles(loaded)) {
+    const pattern = localeNamePattern(entry.pattern)
+    const names = (
+      await filesIn(
+        join(loaded.root, ...entry.dir.split('/')),
+        entry.pattern.split('/').length - 1,
+      )
+    ).sort()
+    for (const name of names) {
+      const localeName = pattern.exec(name)?.[1]
+      if (localeName === undefined) continue
+      const known = projectLocales.some(
+        (locale) => localeFileName(locale, localeMap) === localeName,
+      )
+      if (known) continue
+      const relativePath = `${entry.dir}/${name}`
+      let parseError: string | undefined
+      try {
+        readLocaleFile(
+          await readFile(join(loaded.root, ...relativePath.split('/')), 'utf8'),
+        )
+      } catch (error) {
+        parseError = error instanceof Error ? error.message : String(error)
+      }
+      warnings.push(
+        strayFileWarning(relativePath, localeName, projectLocales, parseError),
+      )
+    }
+  }
+  return warnings
 }
 
 // The server's `/match` rule: layout whitespace is not wording.

@@ -521,6 +521,23 @@ describe('commands', () => {
     ).toEqual(['title pending-publish', 'new pending-publish'])
   })
 
+  it('diff reports an empty value and exits 1', async () => {
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    await put('locales/en.json', '{ "blank": "" }')
+    expect(await cli(['diff'], project({}).fetch)).toBe(1)
+    const text = out.join('')
+    expect(text).toMatch(
+      /empty\s+blank: "" \(empty locally, no text on remote\)/,
+    )
+    expect(text).toContain(
+      'An empty value usually renders blank instead of falling back to the source locale; delete the key from the file to fall back, or wait for the translation.',
+    )
+    expect(text).toMatch(/1 empty/)
+  })
+
   it('apply refuses a plan the project moved past', async () => {
     await put(
       'localness.config.json',

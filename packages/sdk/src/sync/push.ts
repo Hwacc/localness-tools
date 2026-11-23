@@ -66,6 +66,7 @@ export function planPush(
   const misnamed = new Set<string>()
 
   for (const entry of comparison.entries) {
+    if (entry.kind === 'empty') continue
     if (entry.kind === 'duplicate' && entry.locations.length > 0) {
       block(entry, 'duplicate')
       continue

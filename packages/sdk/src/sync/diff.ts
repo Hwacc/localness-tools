@@ -2,6 +2,7 @@ import type { LocalnessClient } from '../client'
 import { requireFiles, type LoadedConfig, type SyncContent } from './config'
 import {
   readLocalFiles,
+  strayLocaleFileWarnings,
   type LocalKeyLocation,
   type LocalLocaleFile,
   type LocalPlacement,
@@ -22,6 +23,7 @@ import { readBase, type BaseTexts } from './state'
  * - `different`: L and P differ with no B to tell who changed. Pull by default.
  * - `conflict`: both moved, or P has someone's unpublished draft. Never automatic.
  * - `pending-publish`: L is the project's unpublished draft; nothing to do.
+ * - `empty`: the file writes the key with an empty value and the project has no text; the page likely shows blank. Never automatic.
  */
 export const DIFF_KINDS = [
   'platform-added',
@@ -33,6 +35,7 @@ export const DIFF_KINDS = [
   'different',
   'conflict',
   'pending-publish',
+  'empty',
   'duplicate',
 ] as const
 export type DiffKind = (typeof DIFF_KINDS)[number]
@@ -71,8 +74,9 @@ function classify(
   draft: string | null,
   base: string | null,
   onPlatform: boolean,
+  empty: boolean,
 ): DiffKind | undefined {
-  if (local === platform) return undefined
+  if (local === platform) return empty && local === null ? 'empty' : undefined
   if (local !== null && onPlatform && local === draft) return 'pending-publish'
   if (local !== null && !onPlatform) {
     return base === null ? 'local-added' : 'platform-deleted'
@@ -99,10 +103,12 @@ export function diffLocaleTexts(input: DiffInput): DiffEntry[] {
     const drafts = input.platform.drafts[locale] ?? {}
     const baseTexts = input.base?.[locale] ?? {}
     const placed = input.placement?.locations[locale] ?? {}
+    const emptyKeys = new Set(input.placement?.empties[locale] ?? [])
     const keys = new Set([
       ...Object.keys(localTexts),
       ...Object.keys(platformTexts),
       ...Object.keys(placed),
+      ...emptyKeys,
     ])
     for (const key of [...keys].sort()) {
       const local = Object.hasOwn(localTexts, key) ? localTexts[key]! : null
@@ -118,7 +124,7 @@ export function diffLocaleTexts(input: DiffInput): DiffEntry[] {
           (locations.length === 0 && platform !== null))
       const kind = split
         ? 'duplicate'
-        : classify(local, platform, draft, base, onPlatform)
+        : classify(local, platform, draft, base, onPlatform, emptyKeys.has(key))
       if (kind) {
         entries.push({
           locale,
@@ -181,9 +187,12 @@ export async function compareLocaleFiles(
     }),
     readBase(loaded),
   ])
-  const read = await readLocalFiles(loaded, Object.keys(platform.texts), {
-    placementLocales: platform.projectLocales,
-  })
+  const [read, fileWarnings] = await Promise.all([
+    readLocalFiles(loaded, Object.keys(platform.texts), {
+      placementLocales: platform.projectLocales,
+    }),
+    strayLocaleFileWarnings(loaded, platform.projectLocales),
+  ])
   const only = options.keys && new Set(options.keys)
   const inScope = <T>(record: Record<string, T>) =>
     only
@@ -202,6 +211,12 @@ export async function compareLocaleFiles(
         inScope(places),
       ]),
     ),
+    empties: Object.fromEntries(
+      Object.entries(read.placement.empties).map(([locale, keys]) => [
+        locale,
+        only ? keys.filter((key) => only.has(key)) : keys,
+      ]),
+    ),
   }
   const configured = requireFiles(loaded)
   const keyPrefix = platform.keyConvention?.prefix ?? ''
@@ -213,10 +228,13 @@ export async function compareLocaleFiles(
     keys: options.keys ? [...options.keys] : null,
     files: read.files.filter((file) => platform.locales.includes(file.locale)),
     placement,
-    warnings: unknown.map(
-      (name) =>
-        `files match.namespace "${name}" is not a namespace of the project (it has: ${platform.namespaces.join(', ') || 'none'}).`,
-    ),
+    warnings: [
+      ...unknown.map(
+        (name) =>
+          `files match.namespace "${name}" is not a namespace of the project (it has: ${platform.namespaces.join(', ') || 'none'}).`,
+      ),
+      ...fileWarnings,
+    ],
     local,
     platform,
     base,

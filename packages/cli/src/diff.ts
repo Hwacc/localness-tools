@@ -24,7 +24,7 @@ export function quote(text: string | null) {
   return JSON.stringify(short)
 }
 
-function detail(entry: DiffEntry) {
+function detail(entry: DiffEntry): string {
   const { local, platform, draft, base } = entry
   switch (entry.kind) {
     case 'platform-added':
@@ -54,10 +54,16 @@ function detail(entry: DiffEntry) {
         .join(', ')
     case 'pending-publish':
       return `${quote(local)} (draft waiting for a publish)`
+    case 'empty':
+      return '"" (empty locally, no text on remote)'
     case 'duplicate':
       return entry.locations.length > 0
         ? `${entry.locations.map((place) => `${place.dir} ${quote(place.value)}`).join(', ')}; remote ${quote(platform)}`
         : `no ${entry.locale} text in ${entry.dirs.join(', ')}; remote ${quote(platform)}`
+    default: {
+      const unreachable: never = entry.kind
+      return unreachable
+    }
   }
 }
 
@@ -116,6 +122,10 @@ const HINTS: [readonly DiffKind[], string][] = [
   [
     ['conflict', 'local-deleted', 'platform-deleted'],
     'Name a key to choose a side: "pull --keys <key>" or "push --keys <key>"; "pull --prune" drops platform-deleted.',
+  ],
+  [
+    ['empty'],
+    'An empty value usually renders blank instead of falling back to the source locale; delete the key from the file to fall back, or wait for the translation.',
   ],
 ]
 

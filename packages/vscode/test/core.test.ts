@@ -464,6 +464,7 @@ describe('placing keys across directories', () => {
         locations: {
           en: { dup: [place('a', 'one'), place('b', 'two')] },
         },
+        empties: {},
       },
       route: (key) =>
         key === 'stray'

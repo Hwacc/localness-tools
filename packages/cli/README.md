@@ -72,8 +72,9 @@ localness skill install                                   # teach coding agents 
 | `different`        | Text differs and there is no base yet                          | pull, or `--keys`    |
 | `conflict`         | Both changed, or the push would overwrite someone else's draft | `--keys`             |
 | `pending-publish`  | The file matches the unpublished remote draft                  | publish in Localness |
+| `empty`            | The file writes an empty value and remote has no text          | by hand              |
 
-The base (`.localness/base.json`, next to the config) is the last text the file and remote agreed on; `pull`, `apply` and `sync` update it. Without it, every change is `different`: run `pull` or `sync` once. `.localness/` gets its own `.gitignore`; never commit it.
+The base (`.localness/base.json`, next to the config) is the last text the file and remote agreed on; `pull`, `apply` and `sync` update it. Without it, every change is `different`: run `pull` or `sync` once. `.localness/` gets its own `.gitignore`; never commit it. `empty` is never pulled or pushed: delete the key to fall back to the source locale, or wait for the translation. A file in a configured directory that matches the pattern but is not a project locale (often a missing `localeMap`, such as `zh.json` for `zh_cn`) is a warning, not a difference.
 
 | Option                 | Commands                              | Description                                                                                                                 |
 | ---------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |

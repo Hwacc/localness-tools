@@ -157,6 +157,7 @@ export async function runPull(io: CliIo, values: CliValues) {
       !kinds.includes(entry.kind) &&
       entry.kind !== 'pending-publish' &&
       entry.kind !== 'duplicate' &&
+      entry.kind !== 'empty' &&
       entry.onPlatform,
   )
   const code = needsPerson(run) ? EXIT_DIFFERENT : 0
