@@ -1,6 +1,6 @@
 {
   "name": "@localness/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Sync a repository's locale JSON files with a Localness project.",
   "license": "MIT",
   "type": "module",
