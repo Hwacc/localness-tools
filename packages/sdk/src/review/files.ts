@@ -90,26 +90,63 @@ export async function prepareReviewDir(root: string, now = Date.now()) {
 
 const editorsDir = (root: string) => join(root, STATE_DIR, 'editors')
 
+/** Review pages this build of the extension can show. */
+export const EDITOR_REVIEW_KINDS = ['extract', 'resolve'] as const
+export type EditorReviewKind = (typeof EDITOR_REVIEW_KINDS)[number]
+
+interface EditorAnnounce {
+  pid: number
+  /** Absent on extensions that only show extract reviews. */
+  kinds?: readonly string[]
+}
+
 /** Tells `review start` that an editor with the extension has this project open. */
 export async function announceEditor(root: string, pid = process.pid) {
   const dir = await ensureStateDir(root, 'editors')
-  await writeJson(join(dir, `${pid}.json`), { pid })
+  await writeJson(join(dir, `${pid}.json`), {
+    pid,
+    kinds: [...EDITOR_REVIEW_KINDS],
+  })
 }
 
 export async function withdrawEditor(root: string, pid = process.pid) {
   await rm(join(editorsDir(root), `${pid}.json`), { force: true })
 }
 
-/** Whether a live editor announced itself; forgets the ones that died. */
-export async function hasEditor(root: string) {
+function announcedKinds(value: EditorAnnounce | null): EditorReviewKind[] {
+  if (!value?.kinds) return ['extract']
+  return value.kinds.filter(
+    (kind): kind is EditorReviewKind =>
+      kind === 'extract' || kind === 'resolve',
+  )
+}
+
+/**
+ * Whether every live editor can show `kind`. One that cannot (an older
+ * extension, which names no kinds) makes this false, so the page opens in
+ * the browser instead of being claimed by that extension. Forgets editors
+ * that died.
+ */
+export async function hasEditor(
+  root: string,
+  kind: EditorReviewKind = 'extract',
+) {
   const names = await readdir(editorsDir(root)).catch(ignoreCode('ENOENT'))
-  let found = false
+  let capable = false
+  let incapable = false
   for (const name of names ?? []) {
     const pid = Number(name.replace(/\.json$/, ''))
-    if (isAlive(pid)) found = true
-    else await rm(join(editorsDir(root), name), { force: true })
+    if (!isAlive(pid)) {
+      await rm(join(editorsDir(root), name), { force: true })
+      continue
+    }
+    const announced = await readJson<EditorAnnounce>(
+      join(editorsDir(root), name),
+    )
+    if (announcedKinds(announced).includes(kind)) capable = true
+    else incapable = true
   }
-  return found
+  return capable && !incapable
 }
 
 /** The `taken` check of a review: names in the source-locale file or on the project. */

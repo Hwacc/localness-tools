@@ -6,6 +6,7 @@ export {
   toResult,
 } from './model'
 export type {
+  ExtractReviewDoc,
   ReviewAction,
   ReviewCandidate,
   ReviewDecision,
@@ -15,8 +16,30 @@ export type {
   ReviewResultItem,
   ReviewRow,
 } from './model'
+export {
+  buildResolveRows,
+  checkResolveDecisions,
+  newerSide,
+  pullNeedsInto,
+  resolveActions,
+  resolveCommands,
+  toResolveResult,
+} from './resolve'
+export type {
+  ResolveAction,
+  ResolveCell,
+  ResolveDecision,
+  ResolveEmpty,
+  ResolveLocation,
+  ResolveResultItem,
+  ResolveReviewDoc,
+  ResolveReviewResult,
+  ResolveRow,
+  ResolveSource,
+} from './resolve'
 export { reviewPage } from './page'
 export type { ReviewPageOptions } from './page'
+export type { PageMessage } from './page/messages'
 export { createReviewSession } from './session'
 export type {
   ReviewResponse,
@@ -26,6 +49,7 @@ export type {
 export {
   announceEditor,
   claimReview,
+  EDITOR_REVIEW_KINDS,
   hasEditor,
   isAlive,
   isReviewId,
@@ -37,4 +61,4 @@ export {
   withdrawEditor,
   writeJson,
 } from './files'
-export type { ReviewClaim } from './files'
+export type { EditorReviewKind, ReviewClaim } from './files'

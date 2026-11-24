@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
+  buildResolveRows,
   claimReview,
   hasEditor,
   isAlive,
@@ -12,19 +13,34 @@ import {
   readJson,
   reviewPaths,
   takenNames,
+  toResolveResult,
+  toResult,
   writeJson,
+  type ResolveReviewDoc,
   type ReviewClaim,
   type ReviewDoc,
   type ReviewResult,
   type ReviewRow,
 } from '@localness/sdk/review'
-import { findConfigFile, loadConfig } from '@localness/sdk/sync'
+import {
+  compareLocaleFiles,
+  findConfigFile,
+  loadConfig,
+} from '@localness/sdk/sync'
 import { lookupTexts } from '../lookup'
-import { loadProject, plural, type CliIo, type CliValues } from '../shared'
+import {
+  configField,
+  list,
+  loadProject,
+  plural,
+  printWarnings,
+  type CliIo,
+  type CliValues,
+} from '../shared'
 import { startReviewServer } from './server'
 
 const USAGE =
-  'Usage: localness review start <file> [--open auto|browser|editor] | localness review wait <id> [--timeout <seconds>]'
+  'Usage: localness review start <file> [--open auto|browser|editor] | localness review start --kind resolve [--locales <a,b>] [--keys <a,b>] [--open auto|browser|editor] | localness review wait <id> [--timeout <seconds>]'
 const OPEN_MODES = ['auto', 'browser', 'editor']
 const START_WAIT_MS = 15_000
 // How long an editor gets to pick the review up before the browser does.
@@ -122,9 +138,69 @@ async function runStart(io: CliIo, values: CliValues, file: string) {
     rows,
     open: inEditor ? 'editor' : 'browser',
   }
-  const files = reviewPaths(loaded.root, id)
-  await writeJson(files.doc, doc)
+  return present(io, values, loaded.root, doc, open)
+}
 
+async function runResolveStart(io: CliIo, values: CliValues) {
+  const open = values.open ?? 'auto'
+  if (!OPEN_MODES.includes(open)) {
+    throw new Error('--open takes auto, browser or editor.')
+  }
+  const { loaded, client } = await loadProject(io, values)
+  const [comparison, meta] = await Promise.all([
+    compareLocaleFiles(loaded, client, {
+      locales: list(values.locales),
+      keys: list(values.keys),
+    }),
+    client.meta(),
+  ])
+  printWarnings(io, comparison.warnings)
+  const built = buildResolveRows(comparison)
+  if (built.rows.length === 0) {
+    const empty = { id: null, rows: 0, openedIn: null }
+    io.stdout(
+      values.json
+        ? `${JSON.stringify(empty)}\n`
+        : 'Nothing needs a decision.\n',
+    )
+    return 0
+  }
+  const now = Date.now()
+  await prepareReviewDir(loaded.root, now)
+  const inEditor =
+    open !== 'browser' && (await hasEditor(loaded.root, 'resolve'))
+  if (open === 'editor' && !inEditor) {
+    throw new Error(
+      'No VS Code or Cursor window with the Localness extension has this project open.',
+    )
+  }
+  const doc: ResolveReviewDoc = {
+    kind: 'resolve',
+    id: randomBytes(4).toString('hex'),
+    createdAt: new Date(now).toISOString(),
+    project: meta.project?.name ?? String(loaded.config.project ?? ''),
+    sourceLocale: comparison.sourceLocale,
+    editor: editorOf(io.env),
+    open: inEditor ? 'editor' : 'browser',
+    config: values.config ? configField(io, loaded) : '',
+    hasBase: built.hasBase,
+    dirs: built.dirs,
+    empties: built.empties,
+    rows: built.rows,
+  }
+  return present(io, values, loaded.root, doc, open)
+}
+
+async function present(
+  io: CliIo,
+  values: CliValues,
+  root: string,
+  doc: ReviewDoc,
+  open: string,
+) {
+  const files = reviewPaths(root, doc.id)
+  await writeJson(files.doc, doc)
+  const inEditor = doc.open === 'editor'
   let claim = inEditor
     ? await waitForClaim(
         files.claim,
@@ -134,7 +210,7 @@ async function runStart(io: CliIo, values: CliValues, file: string) {
   if (!claim && open === 'editor') {
     throw new Error('The editor did not open the review; try --open browser.')
   }
-  claim ??= await serveInBrowser(io, values, id, files.claim)
+  claim ??= await serveInBrowser(io, values, doc.id, files.claim)
   if (!claim?.url && !claim?.editor) {
     throw new Error(
       claim?.error ?? 'The review page did not start; check the review file.',
@@ -142,17 +218,18 @@ async function runStart(io: CliIo, values: CliValues, file: string) {
   }
   if (claim.url) openBrowser(claim.url)
   const openedIn = claim.url ? 'browser' : 'editor'
+  const noun = doc.kind === 'resolve' ? 'key' : 'text'
   if (values.json) {
     io.stdout(
-      `${JSON.stringify({ id, url: claim.url ?? null, rows: rows.length, openedIn })}\n`,
+      `${JSON.stringify({ id: doc.id, url: claim.url ?? null, rows: doc.rows.length, openedIn })}\n`,
     )
   } else {
     const where = claim.url
       ? `opened in the browser:\n  ${claim.url}`
       : 'opened in your editor.'
     io.stdout(
-      `Review ${id}: ${plural(rows.length, 'text')}, ${where}\n` +
-        `Run "localness review wait ${id}" for the decisions.\n`,
+      `Review ${doc.id}: ${plural(doc.rows.length, noun)}, ${where}\n` +
+        `Run "localness review wait ${doc.id}" for the decisions.\n`,
     )
   }
   return 0
@@ -185,7 +262,10 @@ async function runServe(io: CliIo, values: CliValues, id: string) {
     if (!doc) throw new Error(`No review ${id}.`)
     const review = await startReviewServer({
       doc,
-      taken: takenNames(loaded, client, doc.sourceLocale),
+      taken:
+        doc.kind === 'resolve'
+          ? undefined
+          : takenNames(loaded, client, doc.sourceLocale),
       onDone: (result) => writeJson(files.result, result),
     })
     const close = () => {
@@ -200,11 +280,12 @@ async function runServe(io: CliIo, values: CliValues, id: string) {
       return 0
     }
     const expire = setTimeout(async () => {
-      await writeJson(files.result, {
-        id,
-        status: 'cancelled',
-        items: [],
-      } satisfies ReviewResult)
+      await writeJson(
+        files.result,
+        doc.kind === 'resolve'
+          ? toResolveResult(doc, 'cancelled', [])
+          : toResult(doc, 'cancelled', []),
+      )
       close()
     }, SERVE_TTL_MS)
     await Promise.race([
@@ -259,21 +340,50 @@ async function runWait(io: CliIo, values: CliValues, id: string) {
   }
 }
 
-/** An interactive page where the person decides, per extracted text, which key it gets. */
+function reviewKind(value: string | undefined): EditorKind {
+  const kind = value ?? 'extract'
+  if (kind !== 'extract' && kind !== 'resolve') {
+    throw new Error('--kind takes extract or resolve.')
+  }
+  return kind
+}
+
+type EditorKind = 'extract' | 'resolve'
+
+/** An interactive page where the person decides an extraction or a diff. */
 export async function runReview(
   io: CliIo,
   values: CliValues,
-  [sub, arg, ...extra]: string[],
+  [sub, ...rest]: string[],
 ) {
-  if (!sub || !arg || extra.length > 0) throw new Error(USAGE)
+  if (!sub) throw new Error(USAGE)
   switch (sub) {
     case 'start':
-      return runStart(io, values, arg)
+      return reviewKind(values.kind) === 'resolve'
+        ? startResolve(io, values, rest)
+        : startExtract(io, values, rest)
     case 'wait':
-      return runWait(io, values, arg)
-    case 'serve':
-      return runServe(io, values, arg)
+    case 'serve': {
+      const [arg, ...extra] = rest
+      if (!arg || extra.length > 0) throw new Error(USAGE)
+      return sub === 'wait'
+        ? runWait(io, values, arg)
+        : runServe(io, values, arg)
+    }
     default:
       throw new Error(USAGE)
   }
+}
+
+function startExtract(io: CliIo, values: CliValues, args: string[]) {
+  const [file, ...extra] = args
+  if (!file || extra.length > 0) throw new Error(USAGE)
+  return runStart(io, values, file)
+}
+
+function startResolve(io: CliIo, values: CliValues, args: string[]) {
+  if (args.length > 0) {
+    throw new Error('review start --kind resolve takes no file.')
+  }
+  return runResolveStart(io, values)
 }

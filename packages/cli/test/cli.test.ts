@@ -521,6 +521,36 @@ describe('commands', () => {
     ).toEqual(['title pending-publish', 'new pending-publish'])
   })
 
+  it('review start --kind resolve rejects a file and reports nothing to decide', async () => {
+    expect(
+      await cli(
+        ['review', 'start', '--kind', 'resolve', 'items.json'],
+        platform({}),
+      ),
+    ).toBe(2)
+    expect(err.join('')).toMatch(/takes no file/)
+
+    err.length = 0
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    await put('locales/en.json', '{ "home": "Home" }')
+    out.length = 0
+    expect(
+      await cli(
+        ['review', 'start', '--kind', 'resolve', '--json'],
+        platform({ home: { en: 'Home' } }),
+      ),
+      err.join(''),
+    ).toBe(0)
+    expect(JSON.parse(out.join(''))).toEqual({
+      id: null,
+      rows: 0,
+      openedIn: null,
+    })
+  })
+
   it('diff reports an empty value and exits 1', async () => {
     await put(
       'localness.config.json',

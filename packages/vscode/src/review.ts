@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, isAbsolute, relative, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import * as vscode from 'vscode'
 import {
@@ -14,22 +14,19 @@ import {
   reviewPage,
   reviewPaths,
   takenNames,
+  toResolveResult,
   toResult,
   withdrawEditor,
   writeJson,
+  type PageMessage,
   type ReviewClaim,
   type ReviewDoc,
   type ReviewRow,
 } from '@localness/sdk/review'
 import type { DataController } from './controller'
+import { showKeyInFile } from './localFiles'
 
 const CLAIM: ReviewClaim = { pid: process.pid, editor: 'vscode' }
-
-type PageMessage =
-  | { type: 'api'; id: number; method: string; path: string; body?: unknown }
-  | { type: 'confirm'; id: number; message: string }
-  | { type: 'alert'; message: string }
-  | { type: 'open'; index: number }
 
 /** The doc can fire its create event before the CLI finished writing it. */
 async function readDoc(path: string) {
@@ -39,6 +36,14 @@ async function readDoc(path: string) {
     await sleep(100)
   }
   return null
+}
+
+async function openLocation(root: string, file: string, key: string) {
+  if (!file || !key) return
+  const abs = resolve(root, file)
+  const fromRoot = relative(root, abs)
+  if (!fromRoot || fromRoot.startsWith('..') || isAbsolute(fromRoot)) return
+  await showKeyInFile(abs, key)
 }
 
 async function openRow(row: ReviewRow | undefined) {
@@ -160,12 +165,17 @@ class ReviewHost implements vscode.Disposable {
     const paths = reviewPaths(root, doc.id)
     const session = createReviewSession({
       doc,
-      taken: takenNames(config, client, doc.sourceLocale),
+      taken:
+        doc.kind === 'resolve'
+          ? undefined
+          : takenNames(config, client, doc.sourceLocale),
       onDone: (result) => writeJson(paths.result, result),
     })
     const panel = vscode.window.createWebviewPanel(
       'localness.review',
-      `Localness review (${doc.rows.length})`,
+      doc.kind === 'resolve'
+        ? `Localness resolve (${doc.rows.length})`
+        : `Localness review (${doc.rows.length})`,
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -177,6 +187,7 @@ class ReviewHost implements vscode.Disposable {
     panel.webview.html = reviewPage({
       host: 'webview',
       nonce: randomBytes(16).toString('hex'),
+      kind: doc.kind === 'resolve' ? 'resolve' : 'extract',
     })
     const reply = (id: number, value: unknown) =>
       void panel.webview.postMessage({ id, value })
@@ -200,7 +211,15 @@ class ReviewHost implements vscode.Disposable {
             `Localness: ${message.message}`,
           )
         case 'open':
+          if (doc.kind === 'resolve') return
           return openRow(doc.rows.find((row) => row.index === message.index))
+        case 'openLocation':
+          if (doc.kind !== 'resolve') return
+          return openLocation(root, message.path, message.key)
+        default: {
+          const unhandled: never = message
+          return unhandled
+        }
       }
     })
     void session.done.then((result) => {
@@ -222,7 +241,12 @@ class ReviewHost implements vscode.Disposable {
       )
       if (choice === 'Reopen') this.show(root, doc)
       if (choice === 'Cancel Review') {
-        await writeJson(paths.result, toResult(doc, 'cancelled', []))
+        await writeJson(
+          paths.result,
+          doc.kind === 'resolve'
+            ? toResolveResult(doc, 'cancelled', [])
+            : toResult(doc, 'cancelled', []),
+        )
       }
     })
   }
@@ -252,8 +276,12 @@ export function registerReview(
       }
       const picked = await vscode.window.showQuickPick(
         docs.map((doc) => ({
-          label: `Review ${doc.id}`,
-          description: `${doc.rows.length} texts`,
+          label:
+            doc.kind === 'resolve' ? `Resolve ${doc.id}` : `Review ${doc.id}`,
+          description:
+            doc.kind === 'resolve'
+              ? `${doc.rows.length} keys`
+              : `${doc.rows.length} texts`,
           detail: new Date(doc.createdAt).toLocaleString(),
           doc,
         })),

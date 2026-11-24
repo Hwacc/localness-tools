@@ -6,6 +6,7 @@ import {
   type KeyViolation,
 } from '@localness/contract/rules'
 import type { DeliveryKeyConvention } from '../schemas'
+import type { ResolveReviewDoc } from './resolve'
 
 const UNNAMED_PREFIX = '__unnamed_'
 
@@ -45,7 +46,9 @@ export interface ReviewDecision {
   key: string
 }
 
-export interface ReviewDoc {
+export interface ExtractReviewDoc {
+  /** Absent on reviews written before resolve pages existed. */
+  kind?: 'extract'
   id: string
   createdAt: string
   project: string
@@ -58,6 +61,8 @@ export interface ReviewDoc {
   namespaces: string[]
   rows: ReviewRow[]
 }
+
+export type ReviewDoc = ExtractReviewDoc | ResolveReviewDoc
 
 export interface ReviewResultItem {
   index: number
@@ -118,7 +123,7 @@ export function initialDecision(row: ReviewRow): ReviewDecision {
 const normalize = (text: string) => text.replace(/\s+/g, ' ').trim()
 
 function violationsOf(
-  doc: ReviewDoc,
+  doc: ExtractReviewDoc,
   name: string,
   level: (all: KeyViolation[]) => KeyViolation[],
   lead = '',
@@ -148,7 +153,7 @@ function newName(row: ReviewRow, decision: ReviewDecision) {
  * suggestions, or null. Advice only: it never blocks approval.
  */
 export function decisionWarnings(
-  doc: ReviewDoc,
+  doc: ExtractReviewDoc,
   decisions: readonly ReviewDecision[],
 ): (string | null)[] {
   return decisions.map((decision, index) => {
@@ -169,7 +174,7 @@ export function decisionWarnings(
  * names that already exist on the project or in the source-locale file.
  */
 export async function checkDecisions(
-  doc: ReviewDoc,
+  doc: ExtractReviewDoc,
   decisions: readonly ReviewDecision[],
   taken: (names: string[]) => Promise<Set<string>>,
 ): Promise<(string | null)[]> {
@@ -224,7 +229,7 @@ export async function checkDecisions(
 }
 
 export function toResult(
-  doc: ReviewDoc,
+  doc: ExtractReviewDoc,
   status: ReviewResult['status'],
   decisions: readonly ReviewDecision[],
 ): ReviewResult {

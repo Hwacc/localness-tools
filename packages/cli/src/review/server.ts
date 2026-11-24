@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import {
   createReviewSession,
   reviewPage,
+  type ResolveReviewResult,
   type ReviewResult,
   type ReviewSessionOptions,
 } from '@localness/sdk/review'
@@ -14,7 +15,7 @@ export interface RunningReview {
   server: Server
   url: string
   /** Settles with what the page decided. */
-  done: Promise<ReviewResult>
+  done: Promise<ReviewResult | ResolveReviewResult>
 }
 
 function readBody(request: IncomingMessage) {
@@ -61,7 +62,15 @@ export async function startReviewServer(
     const given = url.searchParams.get('t') ?? request.headers['x-review-token']
     if (given !== token) return send(403, { error: 'Wrong review token.' })
     if (request.method === 'GET' && url.pathname === '/') {
-      return send(200, reviewPage({ host: 'browser', token }), 'text/html')
+      return send(
+        200,
+        reviewPage({
+          host: 'browser',
+          token,
+          kind: options.doc.kind === 'resolve' ? 'resolve' : 'extract',
+        }),
+        'text/html',
+      )
     }
     let body: unknown
     try {

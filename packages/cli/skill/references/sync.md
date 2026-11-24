@@ -1,10 +1,14 @@
 # Syncing locale files
 
 1. Run `localness diff --json`. Exit code 0: nothing differs. 1: differences. 2: error.
-2. Sort each difference by `kind` (table below) and list everything that needs a person.
-3. Ask the person about those keys and wait for the answer.
-4. Bring the remote text in: `localness pull`, or `localness pull --keys <a,b>` for keys the person gave to remote.
-5. Plan local changes: `localness push --json`, or `localness push --keys <a,b> --json` for keys the person gave to the local side. It writes nothing to remote.
+2. Sort each difference by `kind` (table below). Kinds marked Ask need a person, and so does an `unrouted` key (its `target.by` is `unrouted`). `empty` is only reported.
+3. When any key needs a person, run `localness review start --kind resolve --json` (add `--config <path>` when you are using one; the commands it returns then carry the same flag). It opens a page where the person decides each key, and can choose per locale. With `openedIn: "editor"` the page opened as a tab in their editor; with `openedIn: "browser"` give them the `url`. Then run `localness review wait <id>` until `status` is no longer `pending`.
+   - `id: null` means nothing needs a decision. Continue below.
+   - `approved`: run `commands` in order. A `pull` command (including `--prune`) writes the locale files now. A `push` command only plans: take it to step 6, and `apply` only after the person approves that plan. Do not pull or push those keys again another way. `cancelled` means change nothing and stop.
+   - Fall back to a table in the chat when `review start` fails (no browser, remote machine) or the person asks for it. One row per key and locale: kind, local text, remote text, and the choices (remote, local, delete locally, or skip; a directory when the key has no place). Apply their reply, show the updated table, and wait again.
+   - Either way, change no files before they approve.
+4. Bring in the remote text the page did not cover. `localness sync` pulls `platform-added` and `platform-changed` and plans the local kinds, and it leaves `different` alone. Use that, or `localness pull --keys` with only the `platform-added` and `platform-changed` keys. Do not run a plain `localness pull` after the page: it also takes every `different` key, including ones the person chose to push or skip. `sync` still reports the `unrouted` and `duplicate` keys the person skipped, and exits 1 for them; they are decided, so do not ask again. When the review was not needed, `localness pull` is still the plain pull.
+5. Plan local changes the page did not cover: `localness push --json`, or `localness push --keys <a,b> --json` for keys the person gave to the local side. It writes nothing to remote. Skip this when step 4 was `localness sync`, which already planned them.
 6. Show the plan to the person: its id, and for each key whether it is created or updated and every locale's old → new text. Also show `blocked`, `warnings` and `leftOut`.
 7. Only after the person approves, run `localness apply <id>`. If it reports the plan stale or expired, nothing was written: run `diff` again and start over; never retry the same id.
 8. Report what was written, and that drafts wait for a publish in the web app.
@@ -29,7 +33,7 @@ With several `localness.config.json` files, do these steps once per config the t
 
 An empty value usually renders blank instead of falling back to the source locale. Do not pull or push it, and delete it only when the person asks. A stderr warning that a file is not a project locale means its name matches the pattern but no project locale (`zh.json` when the project has `zh_cn` usually needs `localeMap`). That file is not read, pulled or pushed. If the warning says it cannot be parsed, the file is empty or not JSON. Report these warnings; never edit `localeMap`, rename or delete the file yourself.
 
-When `hasBase` is false (the first sync), every changed text is `different`. Say so before pulling: a plain `pull` takes the remote text for all of them.
+When `hasBase` is false (the first sync), every changed text is `different`. The resolve page lists them. Say so before a plain `pull`: it takes the remote text for all of them.
 
 ## New keys
 

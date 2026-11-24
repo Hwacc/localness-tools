@@ -3,5 +3,6 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "test", "tsdown.config.ts"]
+  "include": ["src", "test", "scripts", "tsdown.config.ts"],
+  "exclude": ["src/review/page/client"]
 }

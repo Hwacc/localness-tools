@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ReviewDoc, ReviewResult } from '@localness/sdk/review'
+import type {
+  ResolveReviewResult,
+  ReviewDoc,
+  ReviewResult,
+} from '@localness/sdk/review'
 import { startReviewServer, type RunningReview } from '../src/review/server'
 
 const convention = {
@@ -73,7 +77,7 @@ describe('review server', () => {
   }
 
   it('needs the token, re-checks on submit and reports the decisions', async () => {
-    const written: ReviewResult[] = []
+    const written: (ReviewResult | ResolveReviewResult)[] = []
     review = await startReviewServer({
       doc: doc(),
       taken: none,

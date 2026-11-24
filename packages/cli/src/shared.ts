@@ -52,6 +52,7 @@ export const OPTIONS = {
   match: { type: 'string' },
   timeout: { type: 'string' },
   open: { type: 'string' },
+  kind: { type: 'string' },
   yes: { type: 'boolean', short: 'y' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean', short: 'v' },

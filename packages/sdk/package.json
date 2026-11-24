@@ -56,12 +56,17 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build:pages": "node scripts/build-pages.ts",
+    "build": "pnpm run build:pages && tsdown",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/review/page/client/tsconfig.json"
   },
   "dependencies": {
     "@localness/contract": "^0.6.0",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "lit-html": "^3.3.3",
+    "rolldown": "^1.3.3"
   }
 }

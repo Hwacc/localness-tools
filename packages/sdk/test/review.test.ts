@@ -6,6 +6,7 @@ import {
   announceEditor,
   checkDecisions,
   claimReview,
+  createReviewSession,
   decisionWarnings,
   hasEditor,
   initialDecision,
@@ -13,7 +14,7 @@ import {
   prepareReviewDir,
   reviewPaths,
   withdrawEditor,
-  type ReviewDoc,
+  type ExtractReviewDoc,
 } from '../src/review'
 
 const convention = {
@@ -24,7 +25,7 @@ const convention = {
   guidance: null,
 } as const
 
-function doc(): ReviewDoc {
+function doc(): ExtractReviewDoc {
   return {
     id: 'abcd1234',
     createdAt: 'now',
@@ -149,6 +150,32 @@ describe('review model', () => {
       null,
     ])
   })
+
+  it('serves a doc written before resolve reviews as an extract review', async () => {
+    const written: unknown[] = []
+    const session = createReviewSession({
+      doc: doc(),
+      taken: none,
+      onDone: (result) => void written.push(result),
+    })
+    const decisions = [
+      { action: 'reuse', key: 'save' },
+      { action: 'reuse', key: 'ok' },
+      { action: 'create', key: 'checkout_apply_coupon' },
+      { action: 'skip', key: '' },
+    ]
+    const check = await session.request('POST', '/api/check', { decisions })
+    expect(check).toMatchObject({
+      status: 200,
+      body: { errors: [null, null, null, null] },
+    })
+    expect(check.body).toHaveProperty('warnings')
+    expect(
+      await session.request('POST', '/api/submit', { decisions }),
+    ).toMatchObject({ status: 200 })
+    expect(written[0]).toMatchObject({ id: 'abcd1234', status: 'approved' })
+    expect(written[0]).not.toHaveProperty('kind')
+  })
 })
 
 describe('review files', () => {
@@ -177,8 +204,20 @@ describe('review files', () => {
     expect(await hasEditor(root)).toBe(false)
     await announceEditor(root)
     expect(await hasEditor(root)).toBe(true)
+    expect(await hasEditor(root, 'resolve')).toBe(true)
     await withdrawEditor(root)
     expect(await hasEditor(root)).toBe(false)
+  })
+
+  it('treats an editor that names no kinds as extract only', async () => {
+    root = await mkdtemp(join(tmpdir(), 'review-'))
+    await announceEditor(root)
+    await writeFile(
+      join(root, '.localness', 'editors', `${process.pid}.json`),
+      `${JSON.stringify({ pid: process.pid })}\n`,
+    )
+    expect(await hasEditor(root, 'extract')).toBe(true)
+    expect(await hasEditor(root, 'resolve')).toBe(false)
   })
 
   it('drops review files older than a day', async () => {

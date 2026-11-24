@@ -22,6 +22,7 @@ import {
   type LoadedConfig,
 } from '@localness/sdk/sync'
 import type { LocalnessClient } from '@localness/sdk'
+import { newerSide } from '@localness/sdk/review'
 import type { DataController } from './controller'
 import type { WorkspaceConfigs } from './configs'
 import { describeError } from './core/errors'
@@ -517,13 +518,20 @@ export function registerSyncView(
     if (node.type !== 'entry') return
     const { entry } = node
     const name = `${entry.key} (${entry.locale})`
-    await vscode.commands.executeCommand(
-      'vscode.diff',
-      texts.uri(`Remote · ${name}`, entry.draft ?? entry.platform),
-      texts.uri(`Locale file · ${name}`, entry.local),
-      `${name}: remote ↔ locale file`,
-      { preview: true },
-    )
+    const remote = texts.uri(`Remote · ${name}`, entry.draft ?? entry.platform)
+    const local = texts.uri(`Locale file · ${name}`, entry.local)
+    const newer = newerSide(entry.kind)
+    const [left, right, title] =
+      newer === 'remote'
+        ? [local, remote, `${name}: locale file → remote`]
+        : [
+            remote,
+            local,
+            `${name}: remote ${newer === 'local' ? '→' : '↔'} locale file`,
+          ]
+    await vscode.commands.executeCommand('vscode.diff', left, right, title, {
+      preview: true,
+    })
   }
 
   const openInProject = (node: Node) => {
