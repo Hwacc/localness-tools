@@ -48,9 +48,12 @@ export {
   toPlanCancelled,
 } from './plan'
 export type {
+  PlanBlockedRow,
   PlanDecision,
   PlanKeyDecision,
   PlanKeyRow,
+  PlanLeft,
+  PlanLocaleChange,
   PlanOutcome,
   PlanReviewDoc,
   PlanReviewResult,
