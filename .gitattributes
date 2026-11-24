@@ -1,2 +1,3 @@
 packages/sdk/src/review/page/bundle.gen.ts linguist-generated=true eol=lf
+packages/sdk/src/review/page/client/flags.gen.ts linguist-generated=true eol=lf
 packages/sdk/src/review/page/style.css eol=lf

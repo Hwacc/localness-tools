@@ -1,5 +1,6 @@
 import { html, nothing, render as renderHtml } from 'lit-html'
 import { repeat } from 'lit-html/directives/repeat.js'
+import { unsafeSVG } from 'lit-html/directives/unsafe-svg.js'
 import type {
   ResolveAction,
   ResolveCell,
@@ -9,6 +10,7 @@ import type {
   ResolveRow,
 } from '../../resolve'
 import { apiError, pageHost, reviewRoot } from './host'
+import { localeFlag, localeName } from './locale'
 
 const host = pageHost()
 const root = reviewRoot()
@@ -56,21 +58,9 @@ function quote(text: string | null | undefined) {
   return `"${shown}"`
 }
 
-function arrow(cell: ResolveCell) {
-  const local = `locale file ${quote(cell.local)}`
-  const remote = `remote ${quote(cell.platform)}`
-  switch (cell.newer) {
-    case 'remote':
-      return `${local} → ${remote}`
-    case 'local':
-      return `${remote} → ${local}`
-    case null:
-      return `${remote} ↔ ${local}`
-    default: {
-      const unhandled: never = cell.newer
-      return unhandled
-    }
-  }
+/** The side the diff treats as the change, so its label can be marked. */
+function changed(cell: ResolveCell, side: 'local' | 'remote') {
+  return cell.newer === side
 }
 
 function sharedActions(row: ResolveRow) {
@@ -201,16 +191,41 @@ function statusLine(error: string | null | undefined, skipped: string) {
   return html`<div class="status ${tone}">${text}</div>`
 }
 
-function previewLine(cell: ResolveCell) {
-  const text = `${cell.locale} · ${kindLabel(cell.kind)} · ${arrow(cell)}`
-  return html`<div>${text}</div>`
+function localeChip(locale: string) {
+  const flag = localeFlag(locale)
+  return html`<span class="chip" title=${locale}>
+    ${flag ? html`<span class="flag">${unsafeSVG(flag)}</span>` : nothing}
+    <span>${localeName(locale)}</span>
+  </span>`
 }
 
-function side(label: string, text: string | null) {
+function previewValue(text: string | null) {
+  const value = text === null ? '(none)' : text
+  return html`<span class="value" title=${text ?? ''}>${value}</span>`
+}
+
+function previewLine(cell: ResolveCell) {
+  return html`<div class="preview-line">
+    <span class="who">
+      ${localeChip(cell.locale)}
+      <span class="badge">${kindLabel(cell.kind)}</span>
+    </span>
+    <span class="mini ${changed(cell, 'local') ? 'changed' : ''}">
+      <span class="label">Locale file</span>
+      ${previewValue(cell.local)}
+    </span>
+    <span class="mini ${changed(cell, 'remote') ? 'changed' : ''}">
+      <span class="label">Remote</span>
+      ${previewValue(cell.platform)}
+    </span>
+  </div>`
+}
+
+function side(label: string, text: string | null, mark: boolean) {
   const value = text === null ? '(none)' : text
   // The box keeps whitespace, so the value cannot sit on its own line.
   // prettier-ignore
-  return html`<div class="box"><span class="label">${label}</span>${value}</div>`
+  return html`<div class="box ${mark ? 'changed' : ''}"><span class="label">${label}</span>${value}</div>`
 }
 
 function actionSeg(
@@ -278,15 +293,18 @@ function localeBlock(
   const skipped = skipHint(cell, decision.action)
   const showDraft = cell.draft !== null && cell.draft !== cell.platform
   return html`<div class="locale">
-    <div>
-      <strong>${cell.locale}</strong>
+    <div class="who">
+      ${localeChip(cell.locale)}
       <span class="badge">${kindLabel(cell.kind)}</span>
-      <span class="hint"> ${arrow(cell)}</span>
     </div>
     <div class="pair">
-      ${side('Locale file', cell.local)}${side(remoteLabel, cell.platform)}
+      ${side('Locale file', cell.local, changed(cell, 'local'))}${side(
+        remoteLabel,
+        cell.platform,
+        changed(cell, 'remote') && !showDraft,
+      )}
     </div>
-    ${showDraft ? side('Remote draft', cell.draft) : nothing}
+    ${showDraft ? side('Remote draft', cell.draft, changed(cell, 'remote')) : nothing}
     ${
       cell.base !== null
         ? html`<div class="hint">Last synced: ${quote(cell.base)}</div>`
@@ -330,7 +348,13 @@ function rowView(row: ResolveRow, index: number) {
       <td class="num">${row.index}</td>
       <td>
         <div class="text">${row.key}</div>
-        <div class="preview">${row.cells.map((cell) => previewLine(cell))}</div>
+        ${
+          open
+            ? nothing
+            : html`<div class="preview">
+                ${row.cells.map((cell) => previewLine(cell))}
+              </div>`
+        }
         ${
           firstError
             ? html`<div class="status bad">${firstError}</div>`

@@ -16,7 +16,7 @@ A repository may have several `localness.config.json` files (one per package or 
 
 ## Rules
 
-- Write to remote only with `localness apply <id>`, and only after a person approved that plan in this conversation. Never write through the HTTP API, an MCP server or the web app.
+- Write to remote only with `localness apply <id>`, and only after a person approved that plan, in this conversation or on its plan page (`localness review start --kind plan`). Never write through the HTTP API, an MCP server or the web app.
 - Never copy text between the locale files and remote by hand: `pull` brings the remote text in, `push` plans sending yours.
 - Never decide a `conflict`, `different` or `duplicate` key yourself. Show each side's text and let a person choose.
 - Never choose the folder of a key yourself: the CLI routes new keys by the config's `match` rules, and a key it cannot route (`unrouted`) waits for a person to name the directory.

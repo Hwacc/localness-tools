@@ -1,4 +1,5 @@
 import type { DiffKind } from '../sync/kinds'
+import { shellArg } from './shell'
 
 /** The fields of a diff row this review reads. Kept off `sync/diff` so the page typecheck does not pull Node. */
 interface ResolveDiff {
@@ -292,12 +293,6 @@ export function checkResolveDecisions(
       return null
     })
   })
-}
-
-function shellArg(value: string) {
-  return /^[A-Za-z0-9_./:@+,-]+$/.test(value)
-    ? value
-    : `"${value.replace(/["\\$`]/g, '\\$&')}"`
 }
 
 interface CommandGroup {

@@ -1,13 +1,14 @@
-import { EXTRACT_SCRIPT, RESOLVE_SCRIPT, STYLE } from './bundle.gen'
+import { EXTRACT_SCRIPT, PLAN_SCRIPT, RESOLVE_SCRIPT, STYLE } from './bundle.gen'
 
 export type ReviewPageHost =
   { host: 'browser'; token: string } | { host: 'webview'; nonce: string }
 
-export type ReviewPageKind = 'extract' | 'resolve'
+export type ReviewPageKind = 'extract' | 'resolve' | 'plan'
 
 const TITLE: Record<ReviewPageKind, string> = {
   extract: 'Localness review',
   resolve: 'Localness resolve',
+  plan: 'Localness push plans',
 }
 
 function pageScript(kind: ReviewPageKind) {
@@ -16,6 +17,8 @@ function pageScript(kind: ReviewPageKind) {
       return EXTRACT_SCRIPT
     case 'resolve':
       return RESOLVE_SCRIPT
+    case 'plan':
+      return PLAN_SCRIPT
     default: {
       const unhandled: never = kind
       return unhandled

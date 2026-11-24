@@ -1,3 +1,4 @@
+import type { LoadedConfig } from '../sync/config'
 import {
   checkDecisions,
   decisionWarnings,
@@ -6,6 +7,13 @@ import {
   type ReviewDoc,
   type ReviewResult,
 } from './model'
+import {
+  checkPlanDecisions,
+  settlePlans,
+  toPlanCancelled,
+  type PlanDecision,
+  type PlanReviewResult,
+} from './plan'
 import {
   checkResolveDecisions,
   toResolveResult,
@@ -18,8 +26,12 @@ export interface ReviewSessionOptions {
   doc: ReviewDoc
   /** New names that already exist on the project or in the local file. Extract only. */
   taken?(names: string[]): Promise<Set<string>>
+  /** The config whose plans a plan review reads and replaces. */
+  loaded?: LoadedConfig
   /** Called once, after the page approves or cancels. */
-  onDone(result: ReviewResult | ResolveReviewResult): Promise<void> | void
+  onDone(
+    result: ReviewResult | ResolveReviewResult | PlanReviewResult,
+  ): Promise<void> | void
 }
 
 export interface ReviewResponse {
@@ -31,8 +43,31 @@ export interface ReviewSession {
   /** Answers one page request, whether it came over HTTP or a webview. */
   request(method: string, path: string, body?: unknown): Promise<ReviewResponse>
   /** Settles with what the page decided. */
-  done: Promise<ReviewResult | ResolveReviewResult>
+  done: Promise<ReviewResult | ResolveReviewResult | PlanReviewResult>
   readonly settled: boolean
+}
+
+function planDecisionsOf(body: unknown): PlanDecision[] {
+  const decisions = (body as { decisions?: unknown } | null)?.decisions
+  if (!Array.isArray(decisions)) throw new Error('Expected "decisions".')
+  return decisions.map((value: unknown) => {
+    const decision = value as {
+      approve?: unknown
+      keys?: unknown
+    } | null
+    const keys = Array.isArray(decision?.keys) ? decision.keys : []
+    return {
+      approve: decision?.approve === true,
+      keys: keys.map((key: unknown) => {
+        const row = key as { include?: unknown; locales?: unknown } | null
+        const locales = Array.isArray(row?.locales) ? row.locales : []
+        return {
+          include: row?.include === true,
+          locales: locales.map((locale) => locale === true),
+        }
+      }),
+    }
+  })
 }
 
 function resolveDecisionsOf(
@@ -76,13 +111,17 @@ export function createReviewSession(
   options: ReviewSessionOptions,
 ): ReviewSession {
   const { doc } = options
-  let finish!: (result: ReviewResult | ResolveReviewResult) => void
-  const done = new Promise<ReviewResult | ResolveReviewResult>(
-    (resolve) => (finish = resolve),
-  )
+  let finish!: (
+    result: ReviewResult | ResolveReviewResult | PlanReviewResult,
+  ) => void
+  const done = new Promise<
+    ReviewResult | ResolveReviewResult | PlanReviewResult
+  >((resolve) => (finish = resolve))
   let settled = false
 
-  const settle = async (result: ReviewResult | ResolveReviewResult) => {
+  const settle = async (
+    result: ReviewResult | ResolveReviewResult | PlanReviewResult,
+  ) => {
     settled = true
     await options.onDone(result)
     finish(result)
@@ -119,6 +158,40 @@ export function createReviewSession(
         }
         case '/api/cancel':
           return settle(toResolveResult(doc, 'cancelled', []))
+        default:
+          return { status: 404, body: { error: 'Not found.' } }
+      }
+    }
+    if (doc.kind === 'plan') {
+      if (!options.loaded) {
+        throw new Error('Plan review needs the loaded config.')
+      }
+      const loaded = options.loaded
+      switch (path) {
+        case '/api/check':
+          return {
+            status: 200,
+            body: { errors: checkPlanDecisions(doc, planDecisionsOf(body)) },
+          }
+        case '/api/submit': {
+          const decisions = planDecisionsOf(body)
+          const errors = checkPlanDecisions(doc, decisions)
+          if (errors.some(Boolean)) return { status: 422, body: { errors } }
+          let result: PlanReviewResult
+          try {
+            result = await settlePlans(loaded, doc, decisions)
+          } catch (error) {
+            return {
+              status: 409,
+              body: {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            }
+          }
+          return settle(result)
+        }
+        case '/api/cancel':
+          return settle(toPlanCancelled(doc))
         default:
           return { status: 404, body: { error: 'Not found.' } }
       }

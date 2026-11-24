@@ -6,6 +6,7 @@ import {
   type KeyViolation,
 } from '@localness/contract/rules'
 import type { DeliveryKeyConvention } from '../schemas'
+import type { PlanReviewDoc } from './plan-doc'
 import type { ResolveReviewDoc } from './resolve'
 
 const UNNAMED_PREFIX = '__unnamed_'
@@ -62,7 +63,43 @@ export interface ExtractReviewDoc {
   rows: ReviewRow[]
 }
 
-export type ReviewDoc = ExtractReviewDoc | ResolveReviewDoc
+export type ReviewDoc = ExtractReviewDoc | ResolveReviewDoc | PlanReviewDoc
+
+export type ReviewKind = 'extract' | 'resolve' | 'plan'
+
+/** A doc written before kinds existed has no `kind` and is an extract review. */
+export function reviewKindOf(doc: ReviewDoc): ReviewKind {
+  switch (doc.kind) {
+    case 'resolve':
+      return 'resolve'
+    case 'plan':
+      return 'plan'
+    case 'extract':
+    case undefined:
+      return 'extract'
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
+
+/** How many rows the page lists: texts, diff keys, or plan keys. */
+export function reviewSize(doc: ReviewDoc): number {
+  switch (doc.kind) {
+    case 'resolve':
+      return doc.rows.length
+    case 'plan':
+      return doc.plans.reduce((sum, plan) => sum + plan.keys.length, 0)
+    case 'extract':
+    case undefined:
+      return doc.rows.length
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
 
 export interface ReviewResultItem {
   index: number

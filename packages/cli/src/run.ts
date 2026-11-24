@@ -36,6 +36,9 @@ Commands:
   review start --kind resolve
                        Open a page for the differences a person must decide
                        (conflict, different, duplicate, unrouted, deleted)
+  review start --kind plan <id>...
+                       Open a page to approve one or more push plans, dropping
+                       keys or locales before apply
   review wait <id>     Print the decisions once approved (JSON; "pending" after
                        --timeout)
   releases [use|create|add|remove]
@@ -74,8 +77,8 @@ Options:
   --use                Also use the release created (releases create)
   --match <glob>       Keys to label, e.g. "checkout.*" (releases add/remove)
   --timeout <seconds>  How long review wait waits (default 90)
-  --kind <kind>        review start: extract (default, needs a file) or resolve
-                       (no file; the CLI reads the diff)
+  --kind <kind>        review start: extract (default, needs a file), resolve
+                       (no file; the CLI reads the diff) or plan (plan ids)
   --open <where>       Where review start shows the page: auto (default),
                        browser or editor
   -y, --yes            Skip the confirmation of --match

@@ -205,6 +205,7 @@ describe('review files', () => {
     await announceEditor(root)
     expect(await hasEditor(root)).toBe(true)
     expect(await hasEditor(root, 'resolve')).toBe(true)
+    expect(await hasEditor(root, 'plan')).toBe(true)
     await withdrawEditor(root)
     expect(await hasEditor(root)).toBe(false)
   })
@@ -218,6 +219,18 @@ describe('review files', () => {
     )
     expect(await hasEditor(root, 'extract')).toBe(true)
     expect(await hasEditor(root, 'resolve')).toBe(false)
+    expect(await hasEditor(root, 'plan')).toBe(false)
+  })
+
+  it('ignores a plan page when the editor does not list it', async () => {
+    root = await mkdtemp(join(tmpdir(), 'review-'))
+    await announceEditor(root)
+    await writeFile(
+      join(root, '.localness', 'editors', `${process.pid}.json`),
+      `${JSON.stringify({ pid: process.pid, kinds: ['extract', 'resolve'] })}\n`,
+    )
+    expect(await hasEditor(root, 'resolve')).toBe(true)
+    expect(await hasEditor(root, 'plan')).toBe(false)
   })
 
   it('drops review files older than a day', async () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type {
+  PlanReviewResult,
   ResolveReviewResult,
   ReviewDoc,
   ReviewResult,
@@ -77,7 +78,8 @@ describe('review server', () => {
   }
 
   it('needs the token, re-checks on submit and reports the decisions', async () => {
-    const written: (ReviewResult | ResolveReviewResult)[] = []
+    const written: (ReviewResult | ResolveReviewResult | PlanReviewResult)[] =
+      []
     review = await startReviewServer({
       doc: doc(),
       taken: none,

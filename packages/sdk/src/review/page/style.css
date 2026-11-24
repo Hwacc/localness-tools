@@ -156,6 +156,71 @@ td.num {
   margin-top: 2px;
 }
 
+.preview-line {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: baseline;
+  margin-top: 4px;
+}
+
+.who,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flag {
+  display: inline-flex;
+  width: 16px;
+  height: 12px;
+  flex: none;
+}
+
+.flag svg {
+  width: 16px;
+  height: 12px;
+  display: block;
+  border-radius: 1px;
+}
+
+.preview-line .mini {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  align-items: baseline;
+}
+
+.preview-line .label,
+.box .label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.preview-line .label {
+  display: inline;
+  flex: none;
+  margin-bottom: 0;
+}
+
+.preview-line .value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-line .changed .label,
+.box.changed .label {
+  color: var(--accent);
+}
+
+.box.changed {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .where a,
 .preview a {
   color: var(--link);
@@ -311,13 +376,6 @@ label.filter {
   word-break: break-word;
 }
 
-.box .label {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-
 .locale {
   margin-top: 10px;
   padding-top: 8px;
@@ -330,8 +388,55 @@ label.filter {
   padding-top: 0;
 }
 
-td.detail {
+td.detail,
+.detail {
   background: var(--soft);
+}
+
+.plan {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.plan.reject {
+  opacity: 0.55;
+}
+
+.plan-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.plan h2 {
+  font-size: 14px;
+  margin: 0;
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.key-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-row > input,
+.locale > label > input {
+  margin-top: 4px;
+}
+
+.stale .text {
+  color: var(--warn);
 }
 
 :root:has(body[data-host='webview']) {

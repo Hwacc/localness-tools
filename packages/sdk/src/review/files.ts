@@ -91,7 +91,7 @@ export async function prepareReviewDir(root: string, now = Date.now()) {
 const editorsDir = (root: string) => join(root, STATE_DIR, 'editors')
 
 /** Review pages this build of the extension can show. */
-export const EDITOR_REVIEW_KINDS = ['extract', 'resolve'] as const
+export const EDITOR_REVIEW_KINDS = ['extract', 'resolve', 'plan'] as const
 export type EditorReviewKind = (typeof EDITOR_REVIEW_KINDS)[number]
 
 interface EditorAnnounce {
@@ -117,7 +117,7 @@ function announcedKinds(value: EditorAnnounce | null): EditorReviewKind[] {
   if (!value?.kinds) return ['extract']
   return value.kinds.filter(
     (kind): kind is EditorReviewKind =>
-      kind === 'extract' || kind === 'resolve',
+      kind === 'extract' || kind === 'resolve' || kind === 'plan',
   )
 }
 

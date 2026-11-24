@@ -18,6 +18,7 @@
   "ignorePatterns": [
     "**/dist/**",
     "node_modules/**",
-    "packages/sdk/src/review/page/bundle.gen.ts"
+    "packages/sdk/src/review/page/bundle.gen.ts",
+    "packages/sdk/src/review/page/client/flags.gen.ts"
   ]
 }

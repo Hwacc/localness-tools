@@ -11,9 +11,12 @@ import {
   isReviewId,
   readJson,
   reviewDir,
+  reviewKindOf,
   reviewPage,
   reviewPaths,
+  reviewSize,
   takenNames,
+  toPlanCancelled,
   toResolveResult,
   toResult,
   withdrawEditor,
@@ -27,6 +30,72 @@ import type { DataController } from './controller'
 import { showKeyInFile } from './localFiles'
 
 const CLAIM: ReviewClaim = { pid: process.pid, editor: 'vscode' }
+
+function panelTitle(doc: ReviewDoc) {
+  const count = reviewSize(doc)
+  switch (doc.kind) {
+    case 'plan':
+      return `Localness push plans (${count})`
+    case 'resolve':
+      return `Localness resolve (${count})`
+    case 'extract':
+    case undefined:
+      return `Localness review (${count})`
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
+
+function reviewLabel(doc: ReviewDoc) {
+  switch (doc.kind) {
+    case 'plan':
+      return `Push plans ${doc.id}`
+    case 'resolve':
+      return `Resolve ${doc.id}`
+    case 'extract':
+    case undefined:
+      return `Review ${doc.id}`
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
+
+function reviewDescription(doc: ReviewDoc) {
+  const count = reviewSize(doc)
+  switch (doc.kind) {
+    case 'plan':
+      return `${count} keys in ${doc.plans.length} plans`
+    case 'resolve':
+      return `${count} keys`
+    case 'extract':
+    case undefined:
+      return `${count} texts`
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
+
+function cancelledResult(doc: ReviewDoc) {
+  switch (doc.kind) {
+    case 'plan':
+      return toPlanCancelled(doc)
+    case 'resolve':
+      return toResolveResult(doc, 'cancelled', [])
+    case 'extract':
+    case undefined:
+      return toResult(doc, 'cancelled', [])
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
 
 /** The doc can fire its create event before the CLI finished writing it. */
 async function readDoc(path: string) {
@@ -166,16 +235,15 @@ class ReviewHost implements vscode.Disposable {
     const session = createReviewSession({
       doc,
       taken:
-        doc.kind === 'resolve'
-          ? undefined
-          : takenNames(config, client, doc.sourceLocale),
+        doc.kind === 'extract' || doc.kind === undefined
+          ? takenNames(config, client, doc.sourceLocale)
+          : undefined,
+      loaded: doc.kind === 'plan' ? config : undefined,
       onDone: (result) => writeJson(paths.result, result),
     })
     const panel = vscode.window.createWebviewPanel(
       'localness.review',
-      doc.kind === 'resolve'
-        ? `Localness resolve (${doc.rows.length})`
-        : `Localness review (${doc.rows.length})`,
+      panelTitle(doc),
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -187,7 +255,7 @@ class ReviewHost implements vscode.Disposable {
     panel.webview.html = reviewPage({
       host: 'webview',
       nonce: randomBytes(16).toString('hex'),
-      kind: doc.kind === 'resolve' ? 'resolve' : 'extract',
+      kind: reviewKindOf(doc),
     })
     const reply = (id: number, value: unknown) =>
       void panel.webview.postMessage({ id, value })
@@ -211,7 +279,7 @@ class ReviewHost implements vscode.Disposable {
             `Localness: ${message.message}`,
           )
         case 'open':
-          if (doc.kind === 'resolve') return
+          if (doc.kind === 'resolve' || doc.kind === 'plan') return
           return openRow(doc.rows.find((row) => row.index === message.index))
         case 'openLocation':
           if (doc.kind !== 'resolve') return
@@ -241,12 +309,7 @@ class ReviewHost implements vscode.Disposable {
       )
       if (choice === 'Reopen') this.show(root, doc)
       if (choice === 'Cancel Review') {
-        await writeJson(
-          paths.result,
-          doc.kind === 'resolve'
-            ? toResolveResult(doc, 'cancelled', [])
-            : toResult(doc, 'cancelled', []),
-        )
+        await writeJson(paths.result, cancelledResult(doc))
       }
     })
   }
@@ -276,12 +339,8 @@ export function registerReview(
       }
       const picked = await vscode.window.showQuickPick(
         docs.map((doc) => ({
-          label:
-            doc.kind === 'resolve' ? `Resolve ${doc.id}` : `Review ${doc.id}`,
-          description:
-            doc.kind === 'resolve'
-              ? `${doc.rows.length} keys`
-              : `${doc.rows.length} texts`,
+          label: reviewLabel(doc),
+          description: reviewDescription(doc),
           detail: new Date(doc.createdAt).toLocaleString(),
           doc,
         })),

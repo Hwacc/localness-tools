@@ -521,6 +521,54 @@ describe('commands', () => {
     ).toEqual(['title pending-publish', 'new pending-publish'])
   })
 
+  it('review start --kind plan needs an id and refuses a missing or expired plan', async () => {
+    expect(
+      await cli(['review', 'start', '--kind', 'plan'], platform({})),
+    ).toBe(2)
+    expect(err.join('')).toMatch(/needs a plan id/)
+
+    err.length = 0
+    await put(
+      'localness.config.json',
+      JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
+    )
+    expect(
+      await cli(['review', 'start', '--kind', 'plan', 'abcd1234'], platform({})),
+    ).toBe(2)
+    expect(err.join('')).toMatch(/No plan abcd1234/)
+
+    err.length = 0
+    await mkdir(join(root, '.localness', 'plans'), { recursive: true })
+    await put(
+      '.localness/plans/abcd1234.json',
+      JSON.stringify({
+        version: 1,
+        id: 'abcd1234',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        expiresAt: '2020-01-01T01:00:00.000Z',
+        baseUrl: BASE_URL,
+        project: null,
+        content: 'published',
+        sourceLocale: 'en',
+        release: null,
+        keys: [
+          {
+            key: 'title',
+            create: null,
+            locales: { en: { text: 'Title', platform: 'Old', draft: null } },
+          },
+        ],
+        blocked: [],
+        warnings: [],
+      }),
+    )
+    expect(
+      await cli(['review', 'start', '--kind', 'plan', 'abcd1234'], platform({})),
+      err.join(''),
+    ).toBe(2)
+    expect(err.join('')).toMatch(/Plan abcd1234 expired/)
+  })
+
   it('review start --kind resolve rejects a file and reports nothing to decide', async () => {
     expect(
       await cli(

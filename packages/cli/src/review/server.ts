@@ -3,7 +3,9 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import {
   createReviewSession,
+  reviewKindOf,
   reviewPage,
+  type PlanReviewResult,
   type ResolveReviewResult,
   type ReviewResult,
   type ReviewSessionOptions,
@@ -15,7 +17,7 @@ export interface RunningReview {
   server: Server
   url: string
   /** Settles with what the page decided. */
-  done: Promise<ReviewResult | ResolveReviewResult>
+  done: Promise<ReviewResult | ResolveReviewResult | PlanReviewResult>
 }
 
 function readBody(request: IncomingMessage) {
@@ -67,7 +69,7 @@ export async function startReviewServer(
         reviewPage({
           host: 'browser',
           token,
-          kind: options.doc.kind === 'resolve' ? 'resolve' : 'extract',
+          kind: reviewKindOf(options.doc),
         }),
         'text/html',
       )

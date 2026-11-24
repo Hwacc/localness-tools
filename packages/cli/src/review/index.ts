@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
+  buildPlanSection,
   buildResolveRows,
   claimReview,
   hasEditor,
@@ -12,10 +13,13 @@ import {
   prepareReviewDir,
   readJson,
   reviewPaths,
+  reviewSize,
   takenNames,
+  toPlanCancelled,
   toResolveResult,
   toResult,
   writeJson,
+  type PlanReviewDoc,
   type ResolveReviewDoc,
   type ReviewClaim,
   type ReviewDoc,
@@ -23,9 +27,11 @@ import {
   type ReviewRow,
 } from '@localness/sdk/review'
 import {
+  checkPlan,
   compareLocaleFiles,
   findConfigFile,
   loadConfig,
+  loadPlan,
 } from '@localness/sdk/sync'
 import { lookupTexts } from '../lookup'
 import {
@@ -40,7 +46,7 @@ import {
 import { startReviewServer } from './server'
 
 const USAGE =
-  'Usage: localness review start <file> [--open auto|browser|editor] | localness review start --kind resolve [--locales <a,b>] [--keys <a,b>] [--open auto|browser|editor] | localness review wait <id> [--timeout <seconds>]'
+  'Usage: localness review start <file> [--open auto|browser|editor] | localness review start --kind resolve [--locales <a,b>] [--keys <a,b>] [--open auto|browser|editor] | localness review start --kind plan <id> [<id>…] [--open auto|browser|editor] | localness review wait <id> [--timeout <seconds>]'
 const OPEN_MODES = ['auto', 'browser', 'editor']
 const START_WAIT_MS = 15_000
 // How long an editor gets to pick the review up before the browser does.
@@ -75,8 +81,10 @@ function editorOf(env: CliIo['env']): ReviewDoc['editor'] {
 
 function openBrowser(url: string) {
   const [command, args] =
+    // explorer.exe opens a folder window for a URL that carries a query
+    // string, so the protocol handler opens the default browser instead.
     process.platform === 'win32'
-      ? ['explorer.exe', [url]]
+      ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
       : process.platform === 'darwin'
         ? ['open', [url]]
         : ['xdg-open', [url]]
@@ -218,21 +226,96 @@ async function present(
   }
   if (claim.url) openBrowser(claim.url)
   const openedIn = claim.url ? 'browser' : 'editor'
-  const noun = doc.kind === 'resolve' ? 'key' : 'text'
+  const noun = nounOf(doc)
+  const rows = reviewSize(doc)
   if (values.json) {
     io.stdout(
-      `${JSON.stringify({ id: doc.id, url: claim.url ?? null, rows: doc.rows.length, openedIn })}\n`,
+      `${JSON.stringify({ id: doc.id, url: claim.url ?? null, rows, openedIn })}\n`,
     )
   } else {
     const where = claim.url
       ? `opened in the browser:\n  ${claim.url}`
       : 'opened in your editor.'
     io.stdout(
-      `Review ${doc.id}: ${plural(doc.rows.length, noun)}, ${where}\n` +
+      `Review ${doc.id}: ${plural(rows, noun)}, ${where}\n` +
         `Run "localness review wait ${doc.id}" for the decisions.\n`,
     )
   }
   return 0
+}
+
+async function runPlanStart(io: CliIo, values: CliValues, ids: string[]) {
+  const open = values.open ?? 'auto'
+  if (!OPEN_MODES.includes(open)) {
+    throw new Error('--open takes auto, browser or editor.')
+  }
+  const { loaded, client } = await loadProject(io, values)
+  const meta = await client.meta()
+  const plans = []
+  let sourceLocale = ''
+  for (const id of ids) {
+    const plan = await loadPlan(loaded, id)
+    sourceLocale ||= plan.sourceLocale
+    const check = await checkPlan(client, plan)
+    if (check.expired) {
+      throw new Error(`Plan ${id} expired; run "localness push" again.`)
+    }
+    if (plan.keys.length === 0) {
+      throw new Error(`Plan ${id} has nothing to push.`)
+    }
+    plans.push(buildPlanSection(plan, check))
+  }
+  const now = Date.now()
+  await prepareReviewDir(loaded.root, now)
+  const inEditor = open !== 'browser' && (await hasEditor(loaded.root, 'plan'))
+  if (open === 'editor' && !inEditor) {
+    throw new Error(
+      'No VS Code or Cursor window with the Localness extension has this project open.',
+    )
+  }
+  const doc: PlanReviewDoc = {
+    kind: 'plan',
+    id: randomBytes(4).toString('hex'),
+    createdAt: new Date(now).toISOString(),
+    project: meta.project?.name ?? String(loaded.config.project ?? ''),
+    sourceLocale,
+    editor: editorOf(io.env),
+    open: inEditor ? 'editor' : 'browser',
+    config: values.config ? configField(io, loaded) : '',
+    plans,
+  }
+  return present(io, values, loaded.root, doc, open)
+}
+
+function nounOf(doc: ReviewDoc) {
+  switch (doc.kind) {
+    case 'extract':
+    case undefined:
+      return 'text'
+    case 'resolve':
+    case 'plan':
+      return 'key'
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
+}
+
+function cancelledResult(doc: ReviewDoc) {
+  switch (doc.kind) {
+    case 'resolve':
+      return toResolveResult(doc, 'cancelled', [])
+    case 'plan':
+      return toPlanCancelled(doc)
+    case 'extract':
+    case undefined:
+      return toResult(doc, 'cancelled', [])
+    default: {
+      const unhandled: never = doc
+      return unhandled
+    }
+  }
 }
 
 function serveInBrowser(
@@ -263,9 +346,10 @@ async function runServe(io: CliIo, values: CliValues, id: string) {
     const review = await startReviewServer({
       doc,
       taken:
-        doc.kind === 'resolve'
-          ? undefined
-          : takenNames(loaded, client, doc.sourceLocale),
+        doc.kind === 'extract' || doc.kind === undefined
+          ? takenNames(loaded, client, doc.sourceLocale)
+          : undefined,
+      loaded: doc.kind === 'plan' ? loaded : undefined,
       onDone: (result) => writeJson(files.result, result),
     })
     const close = () => {
@@ -280,12 +364,7 @@ async function runServe(io: CliIo, values: CliValues, id: string) {
       return 0
     }
     const expire = setTimeout(async () => {
-      await writeJson(
-        files.result,
-        doc.kind === 'resolve'
-          ? toResolveResult(doc, 'cancelled', [])
-          : toResult(doc, 'cancelled', []),
-      )
+      await writeJson(files.result, cancelledResult(doc))
       close()
     }, SERVE_TTL_MS)
     await Promise.race([
@@ -342,13 +421,13 @@ async function runWait(io: CliIo, values: CliValues, id: string) {
 
 function reviewKind(value: string | undefined): EditorKind {
   const kind = value ?? 'extract'
-  if (kind !== 'extract' && kind !== 'resolve') {
-    throw new Error('--kind takes extract or resolve.')
+  if (kind !== 'extract' && kind !== 'resolve' && kind !== 'plan') {
+    throw new Error('--kind takes extract, resolve or plan.')
   }
   return kind
 }
 
-type EditorKind = 'extract' | 'resolve'
+type EditorKind = 'extract' | 'resolve' | 'plan'
 
 /** An interactive page where the person decides an extraction or a diff. */
 export async function runReview(
@@ -359,9 +438,7 @@ export async function runReview(
   if (!sub) throw new Error(USAGE)
   switch (sub) {
     case 'start':
-      return reviewKind(values.kind) === 'resolve'
-        ? startResolve(io, values, rest)
-        : startExtract(io, values, rest)
+      return startReview(io, values, rest)
     case 'wait':
     case 'serve': {
       const [arg, ...extra] = rest
@@ -373,6 +450,29 @@ export async function runReview(
     default:
       throw new Error(USAGE)
   }
+}
+
+function startReview(io: CliIo, values: CliValues, args: string[]) {
+  const kind = reviewKind(values.kind)
+  switch (kind) {
+    case 'plan':
+      return startPlan(io, values, args)
+    case 'resolve':
+      return startResolve(io, values, args)
+    case 'extract':
+      return startExtract(io, values, args)
+    default: {
+      const unhandled: never = kind
+      return unhandled
+    }
+  }
+}
+
+function startPlan(io: CliIo, values: CliValues, args: string[]) {
+  if (args.length === 0) {
+    throw new Error('review start --kind plan needs a plan id.')
+  }
+  return runPlanStart(io, values, [...new Set(args)])
 }
 
 function startExtract(io: CliIo, values: CliValues, args: string[]) {

@@ -14,6 +14,6 @@ When a person asks to move hardcoded user-facing text into locale keys:
    Fall back to a table in the chat when `review start` fails (no browser, remote machine) or the person asks for it. Columns: `#` (1, 2, 3, ...), text, file and line, then either the key to reuse (with its alternatives) or the new name. Below the table, tell the person they can approve everything, or reply with row numbers and what to do, for example `2 use auth_sign_in_title`, `5 rename to cart_coupon_label`, `7 skip`. Apply their instructions, show the updated table with the same numbers, and wait again.
    Either way, change no files before they approve.
 5. After approval, add the new keys with their text to the source-locale file only, and replace each string in the code with the i18n call the file already uses (same function, import and argument style). Reused keys need no locale file change; skipped texts stay as they are.
-6. Continue with [sync.md](sync.md) from `localness push --json`: show the plan, and `apply` only after approval. A key blocked with `key-name` breaks the convention: rename it and plan again.
+6. Continue with [sync.md](sync.md) from `localness push --json`: approve the plan on the plan page, or in the chat when that page will not open. A key blocked with `key-name` breaks the convention: rename it and plan again.
 
 Never rename or delete existing keys while extracting, and never touch code outside the scope the person named.

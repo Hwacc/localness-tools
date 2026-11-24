@@ -3,6 +3,8 @@ export {
   decisionWarnings,
   initialDecision,
   parseReviewInput,
+  reviewKindOf,
+  reviewSize,
   toResult,
 } from './model'
 export type {
@@ -11,6 +13,7 @@ export type {
   ReviewCandidate,
   ReviewDecision,
   ReviewDoc,
+  ReviewKind,
   ReviewItemInput,
   ReviewResult,
   ReviewResultItem,
@@ -37,6 +40,22 @@ export type {
   ResolveRow,
   ResolveSource,
 } from './resolve'
+export {
+  buildPlanSection,
+  checkPlanDecisions,
+  narrowPlan,
+  settlePlans,
+  toPlanCancelled,
+} from './plan'
+export type {
+  PlanDecision,
+  PlanKeyDecision,
+  PlanKeyRow,
+  PlanOutcome,
+  PlanReviewDoc,
+  PlanReviewResult,
+  PlanSection,
+} from './plan'
 export { reviewPage } from './page'
 export type { ReviewPageOptions } from './page'
 export type { PageMessage } from './page/messages'
