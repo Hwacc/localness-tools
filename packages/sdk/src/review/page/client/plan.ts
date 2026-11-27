@@ -256,7 +256,13 @@ function keyView(row: PlanKeyRow, planIndex: number, keyIndex: number) {
           : nothing
       }
     </div>
-    <button type="button" @click=${() => { toggle(planIndex, keyIndex); render() }}>
+    <button
+      type="button"
+      @click=${() => {
+        toggle(planIndex, keyIndex)
+        render()
+      }}
+    >
       ${open ? 'Hide' : 'Per locale'} (${row.locales.length})
     </button>
   </div>`
@@ -266,8 +272,7 @@ function planView(section: PlanSection, planIndex: number) {
   const decision = decisions[planIndex]
   const created = section.keys.filter((key) => key.create).length
   const release = section.release ? `, labelled ${section.release}` : ''
-  const createdText =
-    created > 0 ? ` (${created} new${release})` : ''
+  const createdText = created > 0 ? ` (${created} new${release})` : ''
   return html`<section class="plan ${decision?.approve ? '' : 'reject'}">
     <div class="plan-head">
       <h2>
@@ -318,7 +323,8 @@ function planView(section: PlanSection, planIndex: number) {
         ? html`<div class="hint">
             Not written:
             ${section.blocked.map(
-              (item) => html`<div>${item.key} (${item.locale}): ${item.text}</div>`,
+              (item) =>
+                html`<div>${item.key} (${item.locale}): ${item.text}</div>`,
             )}
           </div>`
         : nothing
@@ -336,10 +342,24 @@ function toolbar() {
       <span>${counts.rejected} rejected</span>
     </span>
     <span class="spacer"></span>
-    <button type="button" @click=${() => { selectAll(); render(); void check() }}>
+    <button
+      type="button"
+      @click=${() => {
+        selectAll()
+        render()
+        void check()
+      }}
+    >
       Select all
     </button>
-    <button type="button" @click=${() => { clearAll(); render(); void check() }}>
+    <button
+      type="button"
+      @click=${() => {
+        clearAll()
+        render()
+        void check()
+      }}
+    >
       Clear all
     </button>
     <button type="button" @click=${cancel}>Cancel</button>
@@ -371,13 +391,19 @@ function mainView() {
     </div>`
   }
   if (!doc) return nothing
-  return repeat(doc.plans, (plan) => plan.id, (plan, index) => planView(plan, index))
+  return repeat(
+    doc.plans,
+    (plan) => plan.id,
+    (plan, index) => planView(plan, index),
+  )
 }
 
 async function check() {
   pending = true
   const mine = ++seq
-  const { status, body } = await host.api('/api/check', { decisions: payload() })
+  const { status, body } = await host.api('/api/check', {
+    decisions: payload(),
+  })
   if (mine !== seq) return
   pending = false
   if (status !== 200) {
@@ -404,7 +430,9 @@ async function cancel() {
 async function approve() {
   approveHeld = true
   render()
-  const { status, body } = await host.api('/api/submit', { decisions: payload() })
+  const { status, body } = await host.api('/api/submit', {
+    decisions: payload(),
+  })
   if (status === 200) {
     done = {
       title: 'Approved',

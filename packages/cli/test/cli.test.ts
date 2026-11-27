@@ -522,9 +522,9 @@ describe('commands', () => {
   })
 
   it('review start --kind plan needs an id and refuses a missing or expired plan', async () => {
-    expect(
-      await cli(['review', 'start', '--kind', 'plan'], platform({})),
-    ).toBe(2)
+    expect(await cli(['review', 'start', '--kind', 'plan'], platform({}))).toBe(
+      2,
+    )
     expect(err.join('')).toMatch(/needs a plan id/)
 
     err.length = 0
@@ -533,7 +533,10 @@ describe('commands', () => {
       JSON.stringify({ baseUrl: BASE_URL, files: { dir: 'locales' } }),
     )
     expect(
-      await cli(['review', 'start', '--kind', 'plan', 'abcd1234'], platform({})),
+      await cli(
+        ['review', 'start', '--kind', 'plan', 'abcd1234'],
+        platform({}),
+      ),
     ).toBe(2)
     expect(err.join('')).toMatch(/No plan abcd1234/)
 
@@ -563,7 +566,10 @@ describe('commands', () => {
       }),
     )
     expect(
-      await cli(['review', 'start', '--kind', 'plan', 'abcd1234'], platform({})),
+      await cli(
+        ['review', 'start', '--kind', 'plan', 'abcd1234'],
+        platform({}),
+      ),
       err.join(''),
     ).toBe(2)
     expect(err.join('')).toMatch(/Plan abcd1234 expired/)

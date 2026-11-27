@@ -213,7 +213,9 @@ describe('settlePlans', () => {
     expect(await loadPlan(loaded, 'bbbb2222')).toMatchObject({ id: 'bbbb2222' })
     await expect(loadPlan(loaded, 'cccc3333')).rejects.toThrow(/No plan/)
     await expect(loadPlan(loaded, 'dddd4444')).rejects.toThrow(/No plan/)
-    const saved = (await listPlans(loaded)).find((item) => item.id !== 'bbbb2222')
+    const saved = (await listPlans(loaded)).find(
+      (item) => item.id !== 'bbbb2222',
+    )
     expect(saved?.keys[0]?.locales).toEqual({
       ja: { text: '題名', platform: '旧', draft: '下書き' },
     })
@@ -269,9 +271,9 @@ describe('settlePlans', () => {
       { include: true, locales: [false, true] },
       { include: true, locales: [true] },
     ])
-    await expect(
-      settlePlans(loaded, doc, [narrowing, all]),
-    ).rejects.toThrow(/No plan cccc3333/)
+    await expect(settlePlans(loaded, doc, [narrowing, all])).rejects.toThrow(
+      /No plan cccc3333/,
+    )
     expect(await listPlans(loaded)).toEqual([present])
 
     const session = createReviewSession({ doc, loaded, onDone: () => {} })
@@ -279,7 +281,9 @@ describe('settlePlans', () => {
       decisions: [narrowing, all],
     })
     expect(answer.status).toBe(409)
-    expect(answer.body).toMatchObject({ error: expect.stringMatching(/No plan/) })
+    expect(answer.body).toMatchObject({
+      error: expect.stringMatching(/No plan/),
+    })
     expect(session.settled).toBe(false)
     expect(await listPlans(loaded)).toEqual([present])
   })

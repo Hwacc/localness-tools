@@ -70,9 +70,7 @@ export function buildPlanSection(
       locale: item.locale,
       text: describeBlocked(item, plan.sourceLocale),
     })),
-    stale: plan.keys
-      .map((item) => item.key)
-      .filter((key) => stale.has(key)),
+    stale: plan.keys.map((item) => item.key).filter((key) => stale.has(key)),
   }
 }
 
@@ -80,10 +78,7 @@ function localeNames(item: PushKey) {
   return Object.keys(item.locales)
 }
 
-function kept(
-  item: PushKey,
-  chosen: PlanDecision['keys'][number] | undefined,
-) {
+function kept(item: PushKey, chosen: PlanDecision['keys'][number] | undefined) {
   const locales: PushKey['locales'] = {}
   if (!chosen?.include) return { keep: false, locales }
   for (const [index, locale] of localeNames(item).entries()) {
@@ -177,7 +172,9 @@ function leftOf(plan: PushPlan, decision: PlanDecision): PlanLeft[] {
       left.push({ key: item.key, locales: names })
       continue
     }
-    const dropped = names.filter((_, localeIndex) => !chosen.locales[localeIndex])
+    const dropped = names.filter(
+      (_, localeIndex) => !chosen.locales[localeIndex],
+    )
     if (dropped.length > 0) left.push({ key: item.key, locales: dropped })
   }
   return left
@@ -219,8 +216,7 @@ export async function settlePlans(
       plans.push({ planId: plan.id, applyId: null, keys: 0, left })
       continue
     }
-    const saved =
-      narrowed === plan ? plan : { ...narrowed, id: newPlanId() }
+    const saved = narrowed === plan ? plan : { ...narrowed, id: newPlanId() }
     if (saved !== plan) {
       await savePlan(loaded, saved)
       await deletePlan(loaded, plan.id)
@@ -236,7 +232,9 @@ export async function settlePlans(
   return { id: doc.id, kind: 'plan', status: 'approved', plans, commands }
 }
 
-export function toPlanCancelled(doc: Pick<PlanReviewDoc, 'id'>): PlanReviewResult {
+export function toPlanCancelled(
+  doc: Pick<PlanReviewDoc, 'id'>,
+): PlanReviewResult {
   return {
     id: doc.id,
     kind: 'plan',

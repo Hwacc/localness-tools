@@ -1,4 +1,9 @@
-import { EXTRACT_SCRIPT, PLAN_SCRIPT, RESOLVE_SCRIPT, STYLE } from './bundle.gen'
+import {
+  EXTRACT_SCRIPT,
+  PLAN_SCRIPT,
+  RESOLVE_SCRIPT,
+  STYLE,
+} from './bundle.gen'
 
 export type ReviewPageHost =
   { host: 'browser'; token: string } | { host: 'webview'; nonce: string }
