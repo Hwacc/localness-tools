@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Push plans can be approved in an editor tab. When an agent runs `localness review start --kind plan <id…>`, the page lists every key and locale each plan would write (remote text → locale file text). Untick keys or single locales, or reject a whole plan, then Approve; a narrowed plan is saved under a new id for `localness apply`. Cancel leaves the plans untouched.
+- Differences that need a person (`localness review start --kind resolve`) open as an editor tab too: choose remote, local, delete locally or skip per key, and per locale when needed.
+- Review pages show each locale with its flag.
+- The Local Files view has an **Empty locally** group: keys the locale file writes as `""` while remote has no text. They are never pulled or pushed.
+
 ## 0.2.0
 
 - Array texts in locale files are read by index (`land.how_list.0.title`). A key the code reads whole, such as `t('land.how_list')`, no longer gets "Key not found on remote" when keys exist below it; its hover lists those keys with their display-locale text (up to 10). Pulling a remote deletion never removes an array element: the key is kept and a warning names it.
